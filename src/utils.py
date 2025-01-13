@@ -23,12 +23,14 @@ def data_split(problem_num: int):
     return (x[:, :idx_split], y[:idx_split]), (x[:, idx_split:], y[idx_split:])
 
 def test(function: list, x: list, y:list) -> float:
-    print(f"MSE (real) : {100*np.square(y - deploy_function(function)(x)).sum()/len(y):g}")
-    return
+    MSE = 100*np.square(y - deploy_function(function)(x)).sum()/len(y)
+    print(f"MSE (real) : {MSE:g}")
+    return MSE
 
 def train(function: list, x: list, y:list) -> float:
-    print(f"MSE (train) : {100*np.square(y - deploy_function(function)(x)).sum()/len(y):g}")
-    return
+    MSE = 100*np.square(y - deploy_function(function)(x)).sum()/len(y)
+    print(f"MSE (train) : {MSE:g}")
+    return MSE
 ###
   # Longer function --> Penalty
   # Genetic Algo / Evolutionary Strategy / ... 
