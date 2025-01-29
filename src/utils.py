@@ -32,7 +32,7 @@ class Individual:
 
 class Node:
     _value: int
-    _func: function
+    #_func: function
     _name: str
     _successor: tuple['Node']
 
@@ -64,11 +64,11 @@ class Node:
     def __str__(self):
         num_child = sum(x is not None for x in self._successor)
         if num_child == 2:
-            return f"({self._successor[0]}{self._value.__name__}{self._successor[1]})"
+            return f"({self._successor[0]} {self._name} {self._successor[1]})"
         elif num_child == 1:
-            return f"({self._value.__name__}{self._successor[0] if self._successor[0] is not None else self._successor[1]})"
+            return f"({self._name} {self._successor[0] if self._successor[0] is not None else self._successor[1]})"
         
-        return self._value
+        return self._name
 
     def draw(self):
         try:
@@ -78,8 +78,6 @@ class Node:
             return None
 
     def __apply_f__(self):
-
-
         ...
 
 
