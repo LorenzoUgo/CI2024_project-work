@@ -77,8 +77,14 @@ class Node:
             warnings.warn(f"Drawing not available ({msg})", UserWarning, 2)
             return None
 
-    def __apply_f__(self):
-        ...
+    def __apply_f__(self, var_value):
+        if not len(self._successor):
+            if isinstance(self._value, str):
+                return var_value
+            else:
+                return self._value
+        
+        return self._func(*[next.__apply_f__(var_value) for next in self._successor])
 
 
 def function_cod(num: int) -> list[str]:
