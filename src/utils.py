@@ -7,6 +7,8 @@ from typing import Callable
 import numbers
 import warnings
 import random
+import copy
+from collections import deque
 from draw import draw
 
 numpy_funct = {
@@ -32,6 +34,12 @@ class Individual:
     def __fitness__(self):
         ''' MSE + f_length '''
         ...
+
+    def show_function(self):
+        print(self.SymRegTree)
+
+    def deploy_function(self, val):
+        return self.SymRegTree.apply(val)
 
     def gene_mutation(self, new):
         ''' What do I want to mutate? '''
@@ -99,11 +107,16 @@ class Node:
         return self.__apply_f__(var_value)
     
     def add_successor(self, n:'Node'):
-        if len(self._successor) == 2 :
-            raise IndexError("Can't have more than 2 successor")
-        
-        self._successor = tuple(list(self._successor).append(n))
-    
+        if not self._leaf:
+            #if len(self._successor) == self._value.nin :
+            #    for node in list(self._successor):
+            #        node.add_successor(n)
+            #else:
+                self._successor = tuple(list(self._successor)+[n])
+                #return
+        else:
+            return
+          
     def get_level(self):
         if self._leaf:
             return 0
@@ -160,35 +173,80 @@ class Genetic_Algorithm:
         self._population_size = pop_size
         self._num_generations = num_gen
         self._num_eras = num_eras
-        self._num_variables = num_var
+        self._variables = [self.formatting(i) for i in range(num_var)]
         self._population = self.__random_init__()
 
+    def formatting(self, idx: int) -> str:
+        return f"x{idx}"
 
     def __random_init__(self):
+        return [Individual(self.__random_tree__(len(self._variables))) for _ in range(self._population_size)]
+    
+    '''def __random_init__(self):
         population = []
 
-        var_list = [f"x{i}" for i in range(self._num_variables)]
-
         for i in range(self._population_size):
-            if self._num_variables == 1:
-                f = Node(var_list[0])
+            if len(self._variables) == 1:
+                f = Node(f"x0")
                 ind = Individual(f)
                 population.append(ind)
             else:
                 j = 0
-                operand = []
-                while j < range(self._num_variables-1):
+                operands = []
+                while j < range(int(np.ceil(len(self._variables)*1.5))):
                     op = random.choice(list(itertools.chain(*numpy_funct.values())))
-                    operand.append(op)
+                    operands.append(op)
                     if op.nin > 1:
                         j += 1
 
-                
-        return population
+                var = 0
+                op = random.choice(operands)
+                f = Node(op)
+                operands.remove(op)
+
+                while len(operands):
+                    if random.random() < 0.5:
+                        op = random.choice(operands)
+                        f.add_successor(Node(op))
+                        operands.remove(op)
+                    else:
+                        if random.random() < 0.5:
+                            f.add_successor(Node(random.uniform(-5, 5)))
+                        else:
+                            # Fare random anche quale variabile viene inserita
+                            f.add_successor(Node(f"x{var}"))
+                            var += 1
+
+        return population'''
+
+    def __random_tree__(self, max_depth: int, current_depth: int = 0):
+        """Return a random tree generated according to num_variables"""
+        # Return a leaf according to a probability that depends on how deep we are
+        if random.random() < (current_depth / max_depth):
+            return self._create_leaf()
+        
+        # Create a function node
+        operator = random.choice(list(itertools.chain(*numpy_funct.values())))
+        successors = [ self.__random_tree__(max_depth, current_depth + 1) for _ in range(operator.nin) ]
+
+        return Node(operator, successors)
+
+    def _create_leaf(self) -> Node:
+        """Create a leaf, either a const or a variable"""
+        if random.random() < 0.3:
+            return Node(random.uniform(-1, 1))
+        else:
+            return Node(random.choice(self._variables))
+    
+    def show_population(self):
+        for ind in self._population:
+            ind.show_function()
 
 
-
-
+    def deploy_population(self, val):
+        for ind in self._population:
+            print("Computed value: ", ind.deploy_function(val))
+### - - - - - ###
 def function_cod(num: int) -> list[str]:
     return [f"f{i}" for i in range(num)]
 
@@ -219,6 +277,7 @@ def train(function: list, x: list, y:list) -> float:
     return MSE
 
 ###
+  # L'ordinamento conta nelle operazioni binarie --> Mettere in atto controlli/randomicità
   # Capire se una fuzione e uni o bi arg è importante quando si fanno modifiche o tagli !!
   # Longer function --> Penalty
   # Genetic Algo / Evolutionary Strategy / ... 
