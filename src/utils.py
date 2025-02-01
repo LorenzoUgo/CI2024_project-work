@@ -30,18 +30,23 @@ numpy_funct = {
 numpy_cost = {np.e, np.pi, np.euler_gamma, np.finfo(float).eps}
 
 class Individual:
-    def __init__(self, f: 'Node'):
-        self.MSE = self.__compute_MSE__()
+    def __init__(self, f: 'Node', x: np.ndarray[float] = None, y: np.ndarray[float] = None):
         self.SymRegTree = f
-        self.fitness = self.__compute_fitness__()
+        if x is not None and y is not None:
+            self.MSE = self.__compute_MSE__(x, y)
+            self.fitness = self.__compute_fitness__()
 
-    def __compute_MSE__(self, x, y):
+    def __compute_MSE__(self, x: np.ndarray[float], y: np.ndarray[float]):
         return 100*np.square(y - deploy_function(self.function)(x)).sum()/len(y)
     
     def __compute_fitness__(self):
         ''' MSE + f_length '''
-        ...
-
+        return self.MSE
+    
+    def compute_metrics(self, x: np.ndarray[float], y: np.ndarray[float]):
+        self.MSE = self.__compute_MSE__(x, y)
+        self.fitness = self.__compute_fitness__()
+        
     def show_function(self):
         print(self.SymRegTree)
 
@@ -67,6 +72,7 @@ class Individual:
     
     def get_MSE(self):
         return self.MSE
+
 
 class Node:
     _value: int|str|function
@@ -263,17 +269,20 @@ class Genetic_Algorithm:
     
     def __crossover__(self, ind1: Individual, ind2: Individual) -> Individual:
         ...
+
     def __random_mutation__(self, ind: Individual) -> Individual:
         new_ind = deepcopy(ind)
         new_ind.gene_mutation(self._variables)
 
         return new_ind
 
-
-
     def __parent_selection__(self)-> Individual:
         ...
+
     def __selection__(self)-> Individual:
+        ...
+
+    def __survival__(self) -> list[Individual]:
         ...
 
     def variable_checking(self, value):
@@ -284,12 +293,11 @@ class Genetic_Algorithm:
         for ind in self._population:
             ind.show_function()
 
-
     def deploy_population(self, val):
         for ind in self._population:
             print("Computed value: ", ind.deploy_function(val))
 
-    def start(self):
+    def start(self, x: np.ndarray[float], y: np.ndarray[float]):
         best_ind_history = list()
 
         for n in tqdm(range(self._num_generations), desc="Generation", leave=False):
@@ -301,8 +309,10 @@ class Genetic_Algorithm:
                 else:
                     ind = self.__selection__(self._population)
 
-                off = self.__mutation__(ind)
-                del ind 
+                off = self.__random_mutation__(ind)
+                del ind
+            
+                off.compute_metrics(x, y)
                 offsprings.append(off)
             
             self.__survival__(offsprings)
@@ -310,7 +320,6 @@ class Genetic_Algorithm:
         self._population[0].show_result()
 
         return best_ind_history
-
 
     def __save_best_ind__(self, history: list):
         history.append(self._population.sort(self._population[0]))
