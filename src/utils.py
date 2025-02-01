@@ -139,7 +139,6 @@ class Node:
         return False
 
     def __mutate__(self, new_val):
-        
         if callable(self._value):
             def _f(*_args, **_kwargs):
                 return new_val(*_args)
@@ -154,8 +153,6 @@ class Node:
             self._value += new_val
             self._name = str(self._value)
             
-
-    
     def apply(self, var_value):
         return self.__apply_f__(var_value)
     
@@ -175,33 +172,6 @@ class Node:
             return 0
         
         return 1 + max(child.get_level() for child in self._successor)
-
-    def replace_function(self, new_f):
-        if not (0 <= index < len(self._successor)):
-            raise IndexError("Index out of range for successor tuple")
-        
-        new_successors = tuple(
-            new_node if i == index else child for i, child in enumerate(self._successor)
-        )
-        return 
-
-    def replace_const(self, new_c):
-        if not (0 <= index < len(self._successor)):
-            raise IndexError("Index out of range for successor tuple")
-        
-        new_successors = tuple(
-            new_node if i == index else child for i, child in enumerate(self._successor)
-        )
-        return 
-
-    def replace_var(self, new_v):
-        if not (0 <= index < len(self._successor)):
-            raise IndexError("Index out of range for successor tuple")
-        
-        new_successors = tuple(
-            new_node if i == index else child for i, child in enumerate(self._successor)
-        )
-        return 
 
     '''def draw(self):
         try:
