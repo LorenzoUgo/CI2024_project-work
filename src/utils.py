@@ -10,28 +10,33 @@ import random
 import copy
 from collections import deque
 from draw import draw
+import individual
+import tree_node
+import matplotlib.pyplot as plt
+from tqdm import tqdm
+
 
 numpy_funct = {
     "arithmetic":       [np.add, np.multiply, np.divide, np.subtract, np.floor_divide, np.power, np.mod],
     "expandlog":        [np.exp, np.expm1, np.exp2, np.log, np.log1p, np.log10, np.log2],
     "trigonometric":    [np.sin, np.cos, np.tan, np.arccos, np.arctan, np.arcsin, np.hypot],
     "hyperbolic":       [np.sinh, np.cosh, np.tanh, np.arccosh, np.arctanh, np.arcsinh],
-    "miscellaneus":     [np.sqrt, np.cbrt, np.square, np.absolute, np.clip, np. reciprocal],
-    "rounding":         [np.ceil, np.round, np.trunc],           #SOLO come supporto post-generazione per ridurre le cifre decimali dei valori
+    "miscellaneus":     [np.sqrt, np.cbrt, np.square, np.absolute, np.reciprocal],
+    #"rounding":         [np.ceil, np.round, np.trunc],           #SOLO come supporto post-generazione per ridurre le cifre decimali dei valori
 }
 
 numpy_cost = {np.e, np.pi, np.euler_gamma, np.finfo(float).eps}
 
 class Individual:
     def __init__(self, f: 'Node'):
-        self.MSE = self.__MSE__
+        self.MSE = self.__compute_MSE__()
         self.SymRegTree = f
-        self.fitness = self.__fitness__()
+        self.fitness = self.__compute_fitness__()
 
-    def __MSE__(self, x, y):
+    def __compute_MSE__(self, x, y):
         return 100*np.square(y - deploy_function(self.function)(x)).sum()/len(y)
     
-    def __fitness__(self):
+    def __compute_fitness__(self):
         ''' MSE + f_length '''
         ...
 
@@ -49,6 +54,12 @@ class Individual:
             self.SymRegTree.replace_const(new)
         elif isinstance(new, str):
             self.SymRegTree.replace_var(new)
+
+    def get_fitness(self):
+        return self.fitness
+    
+    def get_MSE(self):
+        return self.MSE
 
 class Node:
     _value: int
@@ -160,21 +171,21 @@ class Node:
 
 class Genetic_Algorithm:
     _population_size: int
-    _offsprings: int
+    _num_offsprings: int
     _num_islands: int
     _population: list[Individual]
     _num_generations: int
     _num_eras: int
-    _num_variables: int
+    _variables: int
 
-    def __init__(self, pop_size, off_num, num_isl, num_gen, num_eras, num_var):
+    def __init__(self, pop_size, off_num, num_gen, num_eras, num_var, num_isl=1):
         self._num_islands = num_isl
-        self._offsprings = off_num
+        self._num_offsprings = off_num
         self._population_size = pop_size
         self._num_generations = num_gen
         self._num_eras = num_eras
         self._variables = [self.formatting(i) for i in range(num_var)]
-        self._population = self.__random_init__()
+        self._population = {i: self.__random_init__() for i in range(self._num_islands)}
 
     def formatting(self, idx: int) -> str:
         return f"x{idx}"
@@ -218,25 +229,29 @@ class Genetic_Algorithm:
                             var += 1
 
         return population'''
-
+    
     def __random_tree__(self, max_depth: int, current_depth: int = 0):
         """Return a random tree generated according to num_variables"""
         # Return a leaf according to a probability that depends on how deep we are
         if random.random() < (current_depth / max_depth):
-            return self._create_leaf()
+            return self.__create_leaf__()
         
         # Create a function node
-        operator = random.choice(list(itertools.chain(*numpy_funct.values())))
-        successors = [ self.__random_tree__(max_depth, current_depth + 1) for _ in range(operator.nin) ]
+        op = random.choice(list(itertools.chain(*numpy_funct.values())))
+        successors = [self.__random_tree__(max_depth, current_depth + 1) for _ in range(op.nin)]
 
-        return Node(operator, successors)
-
-    def _create_leaf(self) -> Node:
+        return Node(op, successors)
+    
+    def __create_leaf__(self) -> Node:
         """Create a leaf, either a const or a variable"""
         if random.random() < 0.3:
             return Node(random.uniform(-1, 1))
         else:
             return Node(random.choice(self._variables))
+    
+    def variable_checking(self, value):
+        if value.shape[0] != len(self._variables):
+            raise ValueError(f"This problem require {len(self._variables)} variables, but you passed only {value.shape[0]} variables !")
     
     def show_population(self):
         for ind in self._population:
@@ -246,6 +261,55 @@ class Genetic_Algorithm:
     def deploy_population(self, val):
         for ind in self._population:
             print("Computed value: ", ind.deploy_function(val))
+
+    def start(self):
+        best_ind_history = list()
+
+        for n in tqdm(range(self._num_generations), desc="Generation", leave=False):
+            offsprings = list()
+            for _ in range(self._num_offsprings):
+                if random.random() < 0.4:
+                    ind1, ind2 = self.__parent_selection__(self._population)    ## Usare la tecnica dell'UNPACKING
+                    ind = self.__crossover__(ind1, ind2)
+                else:
+                    ind = self.__selection__(self._population)
+
+                off = self.__mutation__(ind)
+                del ind 
+                offsprings.append(off)
+            
+            self.__survival__(offsprings)
+
+        self._population[0].show_result()
+
+        return best_ind_history
+
+
+
+    def __save_best_ind__(self, history: list):
+        history.append(self._population.sort(self._population[0]))
+        return history
+    
+    def plot_fitness_history(self, history: list[Individual]):
+        generations = list(range(1, self._num_generations))
+        fitness_history = [i.get_fitness() for i in history]
+        plt.plot(generations, fitness_history, marker='o', linestyle='-', color='r')
+        plt.title('Fitness Over Generations')
+        plt.xlabel('Generation')
+        plt.ylabel('Fitness')
+        plt.grid(True)
+        plt.show()
+
+    def plot_MSE_history(self, history: list[Individual]):
+        generations = list(range(1, self._num_generations))
+        fitness_history = [i.get_MSE() for i in history]
+        plt.plot(generations, fitness_history, marker='o', linestyle='-', color='r')
+        plt.title('MSE Over Generations')
+        plt.xlabel('Generation')
+        plt.ylabel('MSE')
+        plt.grid(True)
+        plt.show()
+
 ### - - - - - ###
 def function_cod(num: int) -> list[str]:
     return [f"f{i}" for i in range(num)]
@@ -259,6 +323,7 @@ def data_split(problem_num: int):
     '''
         Dataset split: 70% train and 30% test.
     '''
+
     data = np.load(f'../data/problem_{problem_num}.npz')
     x = data['x']
     y = data['y']
