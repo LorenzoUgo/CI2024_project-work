@@ -13,7 +13,9 @@ from draw import draw
 import individual
 import tree_node
 import matplotlib.pyplot as plt
+import types
 from tqdm import tqdm
+from copy import deepcopy
 
 
 numpy_funct = {
@@ -46,14 +48,19 @@ class Individual:
     def deploy_function(self, val):
         return self.SymRegTree.apply(val)
 
-    def gene_mutation(self, new):
+    def gene_mutation(self, vars):
         ''' What do I want to mutate? '''
-        if callable(new):
-            self.SymRegTree.replace_function(new)
-        elif isinstance(new, numbers.Number):
-            self.SymRegTree.replace_const(new)
-        elif isinstance(new, str):
-            self.SymRegTree.replace_var(new)
+        type_mu = random.choice(range(3))
+
+        if type_mu==0:
+            ## NEW Operand
+            self.SymRegTree.mutate(random.choice(list(itertools.chain(*numpy_funct.values()))))
+        elif type_mu==1:
+            ## Change in the Value
+            self.SymRegTree.mutate(random.gauss(mu=0, sigma=1))
+        elif type_mu==2 and len(vars) > 1:
+            ## NEW Variable, if multiple variable
+            self.SymRegTree.mutate(random.choice(vars))
 
     def get_fitness(self):
         return self.fitness
@@ -62,7 +69,7 @@ class Individual:
         return self.MSE
 
 class Node:
-    _value: int
+    _value: int|str|function
     _name: str
     _successor: tuple['Node']
 
@@ -114,6 +121,41 @@ class Node:
         
         return self._value(*[next.__apply_f__(var_value) for next in self._successor])
     
+    def __is_equivalent(self, f1, f2) -> bool:
+        if isinstance(f1, (int, str)):
+            return type(f1) == type(f1)
+        else:
+            return isinstance(f1, types.FunctionType) and isinstance(f2, np.ufunc)
+    
+    def mutate(self, new):
+        if self.__is_equivalent(self._value) and random.random() < 0.5:   ##  TODO update...
+            self.__mutate__(new)
+            return True
+
+        for child in self._successor:
+            if child.mutate(new):
+                return True
+        
+        return False
+
+    def __mutate__(self, new_val):
+        
+        if callable(self._value):
+            def _f(*_args, **_kwargs):
+                return new_val(*_args)
+            self._value = _f
+            self._name = new_val.__name__
+
+        elif isinstance(self._value, str):
+            self._value = new_val
+            self._name = new_val
+        
+        elif isinstance(self._value, numbers.Number):
+            self._value += new_val
+            self._name = str(self._value)
+            
+
+    
     def apply(self, var_value):
         return self.__apply_f__(var_value)
     
@@ -161,12 +203,12 @@ class Node:
         )
         return 
 
-    def draw(self):
+    '''def draw(self):
         try:
             return draw(self)
         except Exception as msg:
             warnings.warn(f"Drawing not available ({msg})", UserWarning, 2)
-            return None
+            return None'''
 
 
 class Genetic_Algorithm:
@@ -249,6 +291,21 @@ class Genetic_Algorithm:
         else:
             return Node(random.choice(self._variables))
     
+    def __crossover__(self, ind1: Individual, ind2: Individual) -> Individual:
+        ...
+    def __random_mutation__(self, ind: Individual) -> Individual:
+        new_ind = deepcopy(ind)
+        new_ind.gene_mutation(self._variables)
+
+        return new_ind
+
+
+
+    def __parent_selection__(self)-> Individual:
+        ...
+    def __selection__(self)-> Individual:
+        ...
+
     def variable_checking(self, value):
         if value.shape[0] != len(self._variables):
             raise ValueError(f"This problem require {len(self._variables)} variables, but you passed only {value.shape[0]} variables !")
@@ -283,7 +340,6 @@ class Genetic_Algorithm:
         self._population[0].show_result()
 
         return best_ind_history
-
 
 
     def __save_best_ind__(self, history: list):
