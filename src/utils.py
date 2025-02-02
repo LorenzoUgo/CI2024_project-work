@@ -73,6 +73,11 @@ class Individual:
     def get_MSE(self):
         return self.MSE
 
+    def show_results(self):
+        print(f"At the end of the generation, The current individual is the best:\n")
+        print(f"\t--> Fitenss = {self.fitness}\n\t--> MSE = {self.MSE}\n")
+        print(f"\t--> Function: ")
+        self.show_function()
 
 class Node:
     _value: int|str|function
@@ -282,8 +287,10 @@ class Genetic_Algorithm:
     def __selection__(self)-> Individual:
         ...
 
-    def __survival__(self) -> list[Individual]:
-        ...
+    def __survival__(self, offsprings: list[Individual]) -> list[Individual]:
+        extended_population = self._population + offsprings
+        extended_population.sort(key=lambda ind: ind.get_fitness())     # ORDERING FROM BEST TO WORSE
+        self._population = extended_population[:self._population_size]  # SURVIVAL SELECTION
 
     def variable_checking(self, value):
         if value.shape[0] != len(self._variables):
