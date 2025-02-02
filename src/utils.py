@@ -44,7 +44,7 @@ class Individual:
         
         
     def __compute_MSE__(self, x: np.ndarray[float], y: np.ndarray[float]):
-        return 100*np.square(y - deploy_function(self.function)(x)).sum()/len(y)
+        return 100*np.square(y - self.deploy_function(x)).sum()/len(y)
     
     def __compute_fitness__(self):
         ''' MSE + f_length '''
