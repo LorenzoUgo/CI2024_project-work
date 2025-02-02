@@ -35,7 +35,14 @@ class Individual:
         if x is not None and y is not None:
             self.MSE = self.__compute_MSE__(x, y)
             self.fitness = self.__compute_fitness__()
-
+    
+    def __eq__(self, other: Individual):
+        if not isinstance(other, Individual):
+            return False
+        
+        return self.SymRegTree == other.SymRegTree
+        
+        
     def __compute_MSE__(self, x: np.ndarray[float], y: np.ndarray[float]):
         return 100*np.square(y - deploy_function(self.function)(x)).sum()/len(y)
     
@@ -122,6 +129,18 @@ class Node:
             return f"({self._name} {self._successor[0] if self._successor[0] is not None else self._successor[1]})"
         
         return self._name
+
+    def __eq__(self, other: "Node"):
+        if not isinstance(other, "Node"):
+            return False
+        
+        if self._name != other._name:
+            return False
+    
+        if len(self._successor) != len(other._successor):
+            return False
+
+        return all(s1 == s2 for s1, s2 in zip(self._successor, other._successor))
 
     def __apply_f__(self, var_value):
         if self._leaf:
@@ -281,11 +300,17 @@ class Genetic_Algorithm:
 
         return new_ind
 
-    def __parent_selection__(self)-> Individual:
-        ...
+    def __parent_selection__(self)-> tuple[Individual, Individual]:
+        p1 = random.choice(self._population)
+        p2 = random.choice(self._population)
+        while p1 == p2:
+            p1 = random.choice(self._population)
+            p2 = random.choice(self._population)
+        return p1, p2
+
 
     def __selection__(self)-> Individual:
-        ...
+        return random.choice(self._population)
 
     def __survival__(self, offsprings: list[Individual]) -> list[Individual]:
         extended_population = self._population + offsprings
