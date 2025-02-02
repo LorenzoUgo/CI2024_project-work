@@ -58,6 +58,7 @@ class Individual:
         print(self.SymRegTree)
 
     def deploy_function(self, val):
+        self.show_function()
         return self.SymRegTree.apply(val)
 
     def gene_mutation(self, vars):
@@ -83,8 +84,7 @@ class Individual:
     def show_results(self):
         print(f"At the end of the generation, The current individual is the best:\n")
         print(f"\t--> Fitenss = {self.fitness}\n\t--> MSE = {self.MSE}\n")
-        print(f"\t--> Function: ")
-        self.show_function()
+        print(f"\t--> Function: {self.SymRegTree}")
 
 class Node:
     _value: int|str|Callable
@@ -158,7 +158,7 @@ class Node:
             return isinstance(f1, types.FunctionType) and isinstance(f2, np.ufunc)
     
     def mutate(self, new):
-        if self.__is_equivalent(self._value) and random.random() < 0.5:   ##  TODO update...
+        if self.__is_equivalent(self._value, new) and random.random() < 0.5:   ##  TODO update...
             self.__mutate__(new)
             return True
 
@@ -227,7 +227,8 @@ class Genetic_Algorithm:
         self._num_generations = num_gen
         self._num_eras = num_eras
         self._variables = [self.formatting(i) for i in range(num_var)]
-        self._population = {i: self.__random_init__() for i in range(self._num_islands)}
+        ## self._population = {i: self.__random_init__() for i in range(self._num_islands)}
+        self._population = self.__random_init__()
 
     def formatting(self, idx: int) -> str:
         return f"x{idx}"
@@ -330,16 +331,19 @@ class Genetic_Algorithm:
             print("Computed value: ", ind.deploy_function(val))
 
     def start(self, x: np.ndarray[float], y: np.ndarray[float]):
+        for ind in self._population:
+            ind.compute_metrics(x, y)
+            
         best_ind_history = list()
 
-        for n in tqdm(range(self._num_generations), desc="Generation", leave=False):
+        for g in tqdm(range(self._num_generations), desc="Generation", leave=False):
             offsprings = list()
-            for _ in range(self._num_offsprings):
-                if random.random() < 0.4:
+            for o in tqdm(range(self._num_offsprings), desc="Offspring generated", leave=False):
+                if random.random() > 2.0:
                     ind1, ind2 = self.__parent_selection__(self._population)    ## Usare la tecnica dell'UNPACKING
                     ind = self.__crossover__(ind1, ind2)
                 else:
-                    ind = self.__selection__(self._population)
+                    ind = self.__selection__()
 
                 off = self.__random_mutation__(ind)
                 del ind
@@ -349,7 +353,7 @@ class Genetic_Algorithm:
             
             self.__survival__(offsprings)
 
-        self._population[0].show_result()
+        self._population[0].show_results()
 
         return best_ind_history
 
