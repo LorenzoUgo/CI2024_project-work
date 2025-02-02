@@ -36,7 +36,7 @@ class Individual:
             self.MSE = self.__compute_MSE__(x, y)
             self.fitness = self.__compute_fitness__()
     
-    def __eq__(self, other: Individual):
+    def __eq__(self, other: 'Individual'):
         if not isinstance(other, Individual):
             return False
         
@@ -87,9 +87,9 @@ class Individual:
         self.show_function()
 
 class Node:
-    _value: int|str|function
+    _value: int|str|Callable
     _name: str
-    _successor: tuple['Node']
+    _successor: tuple['Node', ...]
 
     def __init__(self, node=None, successors=None):
 
@@ -131,7 +131,7 @@ class Node:
         return self._name
 
     def __eq__(self, other: "Node"):
-        if not isinstance(other, "Node"):
+        if not isinstance(other, Node):
             return False
         
         if self._name != other._name:
