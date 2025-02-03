@@ -67,12 +67,15 @@ class Individual:
         return self.SymRegTree.apply(val)
 
     def gene_mutation(self, vars):
-        ''' What do I want to mutate? '''
+        ''' 
+        What do I want to mutate? 
+        Can I mutate a node into a different type?
+        '''
         type_mu = random.choice(range(2))
-
-        #if type_mu==0:
-        #    ## NEW Operand
-        #    self.SymRegTree.mutate(random.choice(list(itertools.chain(*numpy_funct.values()))))
+        
+        if type_mu==0:
+            ## NEW Operand
+            self.SymRegTree.mutate(random.choice(list(itertools.chain(*numpy_funct.values()))))
         if type_mu==0:
             ## Change in the Value
             self.SymRegTree.mutate(random.gauss(mu=0, sigma=1))
@@ -173,12 +176,22 @@ class Node:
         
         return False
 
-    def __mutate__(self, new_val):
+    def __mutate__(self, new_val: np.ufunc):
         if callable(new_val):
+            ##  TODO problem to face: can change ufunct.nin --> need to change the number of successors
             def _f(*_args, **_kwargs):
                 return new_val(*_args)
             self._value = _f
             self._name = new_val.__name__
+
+            if new_val.nin > len(self._successor):
+                if isinstance(self._successor[0]._value, str):
+                    self._successor = (self._successor[0], Node(random.gauss(mu=0, sigma=1)))
+                else:
+                    ## How to insert a different variable ?
+                    self._successor = (self._successor[0], Node("x0"))
+            else:
+                self._successor = (random.choice(self._successor))
 
         elif isinstance(new_val, str):
             self._value = new_val
