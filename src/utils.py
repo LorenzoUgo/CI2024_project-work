@@ -190,9 +190,12 @@ class Node:
                 else:
                     ## How to insert a different variable ?
                     self._successor = (self._successor[0], Node("x0"))
-            else:
-                self._successor = (random.choice(self._successor))
 
+            elif new_val.nin < len(self._successor):
+                self._successor = (random.choice(self._successor),)
+        
+            elif new_val.nin == len(self._successor):
+                self._successor = tuple(random.sample(self._successor, len(self._successor)))
         elif isinstance(new_val, str):
             self._value = new_val
             self._name = new_val
