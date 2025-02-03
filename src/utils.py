@@ -14,6 +14,7 @@ import individual
 import tree_node
 import matplotlib.pyplot as plt
 import types
+from functools import total_ordering
 from tqdm import tqdm
 from copy import deepcopy
 
@@ -29,20 +30,26 @@ numpy_funct = {
 
 numpy_cost = {np.e, np.pi, np.euler_gamma, np.finfo(float).eps}
 
+@total_ordering
 class Individual:
     def __init__(self, f: 'Node', x: np.ndarray[float] = None, y: np.ndarray[float] = None):
         self.SymRegTree = f
         if x is not None and y is not None:
             self.MSE = self.__compute_MSE__(x, y)
             self.fitness = self.__compute_fitness__()
-    
+
     def __eq__(self, other: 'Individual'):
         if not isinstance(other, Individual):
             return False
         
         return self.SymRegTree == other.SymRegTree
-        
-        
+    
+    def __lt__(self, other: 'Individual'):
+        if isinstance(other, Individual):
+            return self.fitness < other.fitness
+    
+        return NotImplemented
+    
     def __compute_MSE__(self, x: np.ndarray[float], y: np.ndarray[float]):
         return 100*np.square(y - self.deploy_function(x)).sum()/len(y)
     
@@ -386,13 +393,13 @@ class Genetic_Algorithm:
                 offsprings.append(off)
             
             self.__survival__(offsprings)
+            best_ind_history = self.__save_best_ind__(best_ind_history)
 
         self._population[0].show_results()
-
-        return self.__save_best_ind__(best_ind_history)
+        return best_ind_history
 
     def __save_best_ind__(self, history: list):
-        history.append(self._population.sort(self._population[0]))
+        history.append(self._population.sort())
         return history
     
     def plot_fitness_history(self, history: list[Individual]):
