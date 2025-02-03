@@ -9,14 +9,17 @@ import warnings
 import random
 import copy
 from collections import deque
-from draw import draw
-import individual
-import tree_node
+from src.draw import draw
 import matplotlib.pyplot as plt
 import types
 from functools import total_ordering
 from tqdm import tqdm
 from copy import deepcopy
+
+import src.s315734 as s315734
+import warnings
+
+warnings.simplefilter("ignore", category=RuntimeWarning)
 
 
 numpy_funct = {
@@ -97,7 +100,7 @@ class Individual:
         return self.MSE
 
     def show_results(self):
-        print(f"At the end of the generation, The current individual is the best:")
+        print(f"At the end, the current individual is the best:")
         print(f"\t--> Fitenss = {self.fitness}\n\t--> MSE = {self.MSE}")
         print(f"\t--> Function: {self.SymRegTree}")
 
@@ -350,13 +353,13 @@ class Genetic_Algorithm:
             p2 = random.choice(self._population)
         return p1, p2
 
-
     def __selection__(self)-> Individual:
         return random.choice(self._population)
 
     def __survival__(self, offsprings: list[Individual]) -> list[Individual]:
         extended_population = self._population + offsprings
         extended_population.sort(key=lambda ind: ind.get_fitness())     # ORDERING FROM BEST TO WORSE
+        ##  print([ind.SymRegTree._name for ind in extended_population])
         self._population = extended_population[:self._population_size]  # SURVIVAL SELECTION
 
     def variable_checking(self, value):
@@ -372,12 +375,13 @@ class Genetic_Algorithm:
             print("Computed value: ", ind.deploy_function(val))
 
     def start(self, x: np.ndarray[float], y: np.ndarray[float]):
+
         for ind in self._population:
             ind.compute_metrics(x, y)
 
         best_ind_history = list()
 
-        for g in tqdm(range(self._num_generations), desc="Generation", leave=False):
+        for g in tqdm(range(self._num_generations), desc="Generation", leave=True):
             offsprings = list()
             for o in tqdm(range(self._num_offsprings), desc="Offspring generated", leave=False):
                 if random.random() > 2.0:
@@ -393,7 +397,7 @@ class Genetic_Algorithm:
                 offsprings.append(off)
             
             self.__survival__(offsprings)
-            best_ind_history = self.__save_best_ind__(best_ind_history)
+            best_ind_history.append(deepcopy(self._population[0]))
 
         self._population[0].show_results()
         return best_ind_history
@@ -403,7 +407,7 @@ class Genetic_Algorithm:
         return history
     
     def plot_fitness_history(self, history: list[Individual]):
-        generations = list(range(1, self._num_generations))
+        generations = list(range(1, self._num_generations+1))
         fitness_history = [i.get_fitness() for i in history]
         plt.plot(generations, fitness_history, marker='o', linestyle='-', color='r')
         plt.title('Fitness Over Generations')
@@ -424,32 +428,38 @@ class Genetic_Algorithm:
 
 ### - - - - - ###
 def function_cod(num: int) -> list[str]:
-    return [f"f{i}" for i in range(num)]
+    return [getattr(s315734, f"f{i}") for i in range(num+1)]
 
-def deploy_function(f: list):
-    def funct(x):
-        ... 
-    return funct
+def data_loader(problem_num: int) -> tuple[np.ndarray, np.ndarray]:
+    problem = np.load(f'data/problem_{problem_num}.npz')
+    x = problem['x']
+    y = problem['y']
+    print(f"Problem type {problem_num}: ", x.shape, y.shape)
+    print(f"Number of variables: ", x.shape[0])
+    
+    return x, y
 
-def data_split(problem_num: int):
+def data_split(x: np.ndarray, y: np.ndarray) -> tuple[tuple[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray]]:
     '''
         Dataset split: 70% train and 30% test.
     '''
+    idx_split = int(x.shape[1]*70/100)
 
-    data = np.load(f'../data/problem_{problem_num}.npz')
-    x = data['x']
-    y = data['y']
-    idx_split = x.shape[1]*70/100
+    _train = (x[:, :idx_split], y[:idx_split])
+    _test = (x[:, idx_split:], y[idx_split:])
 
-    return (x[:, :idx_split], y[:idx_split]), (x[:, idx_split:], y[idx_split:])
+    print(f"Train dataset: ", _train[0].shape, _train[1].shape)
+    print(f"Test dataset: ", _test[0].shape, _test[1].shape)
 
-def test(function: list, x: list, y:list) -> float:
-    MSE = 100*np.square(y - deploy_function(function)(x)).sum()/len(y)
+    return _train, _test
+
+def test(ind: Individual, x: list, y:list) -> float:
+    MSE = 100*np.square(y - ind.deploy_function(x)).sum()/len(y)
     print(f"MSE (real) : {MSE:g}")
     return MSE
 
-def train(function: list, x: list, y:list) -> float:
-    MSE = 100*np.square(y - deploy_function(function)(x)).sum()/len(y)
+def train(ind: Individual, x: list, y:list) -> float:
+    MSE = 100*np.square(y - ind.deploy_function(x)).sum()/len(y)
     print(f"MSE (train) : {MSE:g}")
     return MSE
 
