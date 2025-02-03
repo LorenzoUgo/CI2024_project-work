@@ -55,6 +55,11 @@ class Individual:
         self.fitness = self.__compute_fitness__()
         
     def show_function(self):
+        print(self.SymRegTree._name)
+        if len(self.SymRegTree._successor)>1:
+            print(self.SymRegTree._successor[1]._name)
+        print(self.SymRegTree._successor[0]._name)
+
         print(self.SymRegTree)
 
     def deploy_function(self, val):
@@ -63,15 +68,15 @@ class Individual:
 
     def gene_mutation(self, vars):
         ''' What do I want to mutate? '''
-        type_mu = random.choice(range(3))
+        type_mu = random.choice(range(2))
 
+        #if type_mu==0:
+        #    ## NEW Operand
+        #    self.SymRegTree.mutate(random.choice(list(itertools.chain(*numpy_funct.values()))))
         if type_mu==0:
-            ## NEW Operand
-            self.SymRegTree.mutate(random.choice(list(itertools.chain(*numpy_funct.values()))))
-        elif type_mu==1:
             ## Change in the Value
             self.SymRegTree.mutate(random.gauss(mu=0, sigma=1))
-        elif type_mu==2 and len(vars) > 1:
+        elif type_mu==1 and len(vars) > 1:
             ## NEW Variable, if multiple variable
             self.SymRegTree.mutate(random.choice(vars))
 
@@ -152,7 +157,7 @@ class Node:
         return self._value(*[next.__apply_f__(var_value) for next in self._successor])
     
     def __is_equivalent(self, f1, f2) -> bool:
-        if isinstance(f1, (int, str)):
+        if isinstance(f1, int) and isinstance(f2, str):
             return type(f1) == type(f1)
         else:
             return isinstance(f1, types.FunctionType) and isinstance(f2, np.ufunc)
@@ -169,17 +174,17 @@ class Node:
         return False
 
     def __mutate__(self, new_val):
-        if callable(self._value):
+        if callable(new_val):
             def _f(*_args, **_kwargs):
                 return new_val(*_args)
             self._value = _f
             self._name = new_val.__name__
 
-        elif isinstance(self._value, str):
+        elif isinstance(new_val, str):
             self._value = new_val
             self._name = new_val
         
-        elif isinstance(self._value, numbers.Number):
+        elif isinstance(new_val, numbers.Number):
             self._value += new_val
             self._name = str(self._value)
             
@@ -333,7 +338,7 @@ class Genetic_Algorithm:
     def start(self, x: np.ndarray[float], y: np.ndarray[float]):
         for ind in self._population:
             ind.compute_metrics(x, y)
-            
+
         best_ind_history = list()
 
         for g in tqdm(range(self._num_generations), desc="Generation", leave=False):
