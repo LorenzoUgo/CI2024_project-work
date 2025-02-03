@@ -55,15 +55,15 @@ class Individual:
         self.fitness = self.__compute_fitness__()
         
     def show_function(self):
-        print(self.SymRegTree._name)
-        if len(self.SymRegTree._successor)>1:
-            print(self.SymRegTree._successor[1]._name)
-        print(self.SymRegTree._successor[0]._name)
+        ##  print(self.SymRegTree._name)
+        ##  if len(self.SymRegTree._successor)>1:
+        ##      print(self.SymRegTree._successor[1]._name)
+        ##  print(self.SymRegTree._successor[0]._name)
 
         print(self.SymRegTree)
 
     def deploy_function(self, val):
-        self.show_function()
+        ## self.show_function()
         return self.SymRegTree.apply(val)
 
     def gene_mutation(self, vars):
@@ -90,8 +90,8 @@ class Individual:
         return self.MSE
 
     def show_results(self):
-        print(f"At the end of the generation, The current individual is the best:\n")
-        print(f"\t--> Fitenss = {self.fitness}\n\t--> MSE = {self.MSE}\n")
+        print(f"At the end of the generation, The current individual is the best:")
+        print(f"\t--> Fitenss = {self.fitness}\n\t--> MSE = {self.MSE}")
         print(f"\t--> Function: {self.SymRegTree}")
 
 class Node:
@@ -104,7 +104,13 @@ class Node:
         if callable(node):
             ''' The node is a function --> Must have some successors --> Not a leaf '''
             def _f(*_args, **_kwargs):
-                return node(*_args)
+                try:
+                    f = node(*_args)
+                    return f
+                except RuntimeWarning as e:
+                    ##  print(e, self._successor) 
+                    return np.nan
+                
 
             self._value = _f
             self._leaf = False
@@ -180,7 +186,13 @@ class Node:
         if callable(new_val):
             ##  TODO problem to face: can change ufunct.nin --> need to change the number of successors
             def _f(*_args, **_kwargs):
-                return new_val(*_args)
+                try:
+                    f = new_val(*_args)
+                    return f
+                except RuntimeWarning as e:
+                    ##  print(e, self._successor) 
+                    return np.nan
+                ##  return new_val(*_args)
             self._value = _f
             self._name = new_val.__name__
 
@@ -196,6 +208,7 @@ class Node:
         
             elif new_val.nin == len(self._successor):
                 self._successor = tuple(random.sample(self._successor, len(self._successor)))
+                
         elif isinstance(new_val, str):
             self._value = new_val
             self._name = new_val
@@ -376,7 +389,7 @@ class Genetic_Algorithm:
 
         self._population[0].show_results()
 
-        return best_ind_history
+        return self.__save_best_ind__(best_ind_history)
 
     def __save_best_ind__(self, history: list):
         history.append(self._population.sort(self._population[0]))
