@@ -54,7 +54,10 @@ class Individual:
         return NotImplemented
     
     def __compute_MSE__(self, x: np.ndarray[float], y: np.ndarray[float]):
-        return 100*np.square(y - self.deploy_function(x)).sum()/len(y)
+        MSE = 100*np.square(y - self.deploy_function(x)).sum()/len(y)
+        if np.isnan(MSE): 
+            return np.inf
+        return MSE
     
     def __compute_fitness__(self):
         ''' MSE + f_length '''
@@ -81,15 +84,15 @@ class Individual:
         What do I want to mutate? 
         Can I mutate a node into a different type?
         '''
-        type_mu = random.choice(range(2))
+        type_mu = random.choice(range(3))
         
         if type_mu==0:
             ## NEW Operand
             self.SymRegTree.mutate(random.choice(list(itertools.chain(*numpy_funct.values()))))
-        if type_mu==0:
+        if type_mu==1:
             ## Change in the Value
             self.SymRegTree.mutate(random.gauss(mu=0, sigma=1))
-        elif type_mu==1 and len(vars) > 1:
+        elif type_mu==2 and len(vars) > 1:
             ## NEW Variable, if multiple variable
             self.SymRegTree.mutate(random.choice(vars))
 
@@ -169,7 +172,8 @@ class Node:
     def __apply_f__(self, var_value):
         if self._leaf:
             if isinstance(self._value, str):
-                return var_value
+                int_ = int(self._value[1:])
+                return var_value[int_]
             else:
                 return self._value
         
@@ -337,9 +341,10 @@ class Genetic_Algorithm:
             return Node(random.choice(self._variables))
     
     def __crossover__(self, ind1: Individual, ind2: Individual) -> Individual:
-        ...
+        ... ## TODO
 
     def __random_mutation__(self, ind: Individual) -> Individual:
+        ##  Can I random mutate val into var into funct and viceversa ??  ##
         new_ind = deepcopy(ind)
         new_ind.gene_mutation(self._variables)
 
@@ -359,7 +364,7 @@ class Genetic_Algorithm:
     def __survival__(self, offsprings: list[Individual]) -> list[Individual]:
         extended_population = self._population + offsprings
         extended_population.sort(key=lambda ind: ind.get_fitness())     # ORDERING FROM BEST TO WORSE
-        ##  print([ind.SymRegTree._name for ind in extended_population])
+        print([ind.SymRegTree._name for ind in extended_population])
         self._population = extended_population[:self._population_size]  # SURVIVAL SELECTION
 
     def variable_checking(self, value):
@@ -369,6 +374,9 @@ class Genetic_Algorithm:
     def show_population(self):
         for ind in self._population:
             ind.show_function()
+
+    def show_individual(self):
+        self._population[0].show_function()
 
     def deploy_population(self, val):
         for ind in self._population:
