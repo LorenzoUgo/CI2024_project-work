@@ -8,7 +8,7 @@ import numbers
 import warnings
 import random
 import copy
-from collections import deque
+from collections import deque, defaultdict
 from src.draw import draw
 import matplotlib.pyplot as plt
 import types
@@ -41,6 +41,8 @@ class Individual:
             self.MSE = self.__compute_MSE__(x, y)
             self.fitness = self.__compute_fitness__()
 
+        self.__compute_level_dict__()
+
     def __eq__(self, other: 'Individual'):
         if not isinstance(other, Individual):
             return False
@@ -63,6 +65,16 @@ class Individual:
         ''' MSE + f_length '''
         return self.MSE
     
+    def __compute_level_dict__(self):
+        self.levels_dict = defaultdict(list)
+        queue = deque([(self.SymRegTree, 0)])  # (Nodo, Livello)
+
+        while queue:
+            node, level = queue.popleft()
+            if node:
+                self.levels_dict[level].append(node.value)  # Salva il nodo nel livello corretto
+                queue.extend([(n, level + 1) for n in node._successor])
+
     def compute_metrics(self, x: np.ndarray[float], y: np.ndarray[float]):
         self.MSE = self.__compute_MSE__(x, y)
         self.fitness = self.__compute_fitness__()
@@ -88,13 +100,20 @@ class Individual:
         
         if type_mu==0:
             ## NEW Operand
-            self.SymRegTree.mutate(random.choice(list(itertools.chain(*numpy_funct.values()))))
+            self.SymRegTree.mutate(random.choice(list(itertools.chain(*numpy_funct.values()))), len(vars))
         if type_mu==1:
             ## Change in the Value
-            self.SymRegTree.mutate(random.gauss(mu=0, sigma=1))
+            self.SymRegTree.mutate(random.gauss(mu=0, sigma=1), len(vars))
         elif type_mu==2 and len(vars) > 1:
             ## NEW Variable, if multiple variable
-            self.SymRegTree.mutate(random.choice(vars))
+            self.SymRegTree.mutate(random.choice(vars), len(vars))
+
+    def crossover(self, other):
+        
+        if random.choice([True, False]):
+            self.SymRegTree.__leaf_crossover__(other)
+        else:
+            self.SymRegTree.__non_leaf_crossover__(other)
 
     def get_fitness(self):
         return self.fitness
@@ -126,7 +145,6 @@ class Node:
                 
 
             self._value = _f
-            self._leaf = False
             self._name = node.__name__
 
         elif isinstance(node, numbers.Number):
@@ -185,20 +203,33 @@ class Node:
         else:
             return isinstance(f1, types.FunctionType) and isinstance(f2, np.ufunc)
     
-    def mutate(self, new):
+    def __get_random_node__(self):
+        """ Ritorna un nodo casuale dell'albero """
+        nodes = []
+
+        def traverse(node):
+            if node:
+                nodes.append(node)
+                for child in node._successors:
+                    traverse(child)
+
+        traverse(self)
+        return random.choice(nodes) if nodes else None
+
+    def mutate(self, new, num_var):
         if self.__is_equivalent(self._value, new) and random.random() < 0.5:   ##  TODO update...
-            self.__mutate__(new)
+            self.__mutate__(new, num_var)
             return True
 
         for child in self._successor:
-            if child.mutate(new):
+            if child.mutate(new, num_var):
                 return True
         
         return False
 
-    def __mutate__(self, new_val: np.ufunc):
+    def __mutate__(self, new_val: np.ufunc, num_var: int):
         if callable(new_val):
-            ##  TODO problem to face: can change ufunct.nin --> need to change the number of successors
+            ##  TODO ...
             def _f(*_args, **_kwargs):
                 try:
                     f = new_val(*_args)
@@ -214,9 +245,8 @@ class Node:
                 if isinstance(self._successor[0]._value, str):
                     self._successor = (self._successor[0], Node(random.gauss(mu=0, sigma=1)))
                 else:
-                    ## How to insert a different variable ?
-                    self._successor = (self._successor[0], Node("x0"))
-
+                    self._successor = (self._successor[0], Node(f"x{int(random.randrange(num_var))}"))
+                    
             elif new_val.nin < len(self._successor):
                 self._successor = (random.choice(self._successor),)
         
@@ -341,7 +371,16 @@ class Genetic_Algorithm:
             return Node(random.choice(self._variables))
     
     def __crossover__(self, ind1: Individual, ind2: Individual) -> Individual:
-        ... ## TODO
+        ## TODO
+        new_ind1 = deepcopy(ind1)
+        new_ind2 = deepcopy(ind2)
+
+        new_node1 = new_ind1.SymRegTree.__get_random_node__()
+        new_node2 = new_ind2.SymRegTree.__get_random_node__()
+
+        ## TODO ... How can i choose the node where i perfom crossover?
+
+        return new_ind1, new_ind2
 
     def __random_mutation__(self, ind: Individual) -> Individual:
         ##  Can I random mutate val into var into funct and viceversa ??  ##
@@ -438,7 +477,7 @@ class Genetic_Algorithm:
 def function_cod(num: int) -> list[str]:
     return [getattr(s315734, f"f{i}") for i in range(num+1)]
 
-def data_loader(problem_num: int) -> tuple[np.ndarray, np.ndarray]:
+def data_loader(problem_num: int) -> tuple[np.ndarray, np.ndarray]: 
     problem = np.load(f'data/problem_{problem_num}.npz')
     x = problem['x']
     y = problem['y']
@@ -477,4 +516,6 @@ def train(ind: Individual, x: list, y:list) -> float:
   # Longer function --> Penalty
   # Genetic Algo / Evolutionary Strategy / ... 
   # Graph representation of function
+  # Crossover needed
+  # Modificare l'interpretazione di livello del grafo -> 
   # ###
