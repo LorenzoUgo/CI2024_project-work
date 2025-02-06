@@ -91,7 +91,7 @@ class Individual:
         ## self.show_function()
         return self.SymRegTree.apply(val)
 
-    def gene_mutation(self, vars):
+    def gene_mutation(self, vars, index: str):
         ''' 
         What do I want to mutate? 
         Can I mutate a node into a different type?
@@ -100,7 +100,7 @@ class Individual:
         
         if type_mu==0:
             ## NEW Operand
-            self.SymRegTree.mutate(random.choice(list(itertools.chain(*numpy_funct.values()))), len(vars))
+            self.SymRegTree.mutate(random.choice(numpy_funct[index]), len(vars))
         if type_mu==1:
             ## Change in the Value
             self.SymRegTree.mutate(random.gauss(mu=0, sigma=1), len(vars))
@@ -295,7 +295,7 @@ class Genetic_Algorithm:
     _population_size: int
     _num_offsprings: int
     _num_islands: int
-    _populations: dict[list[Individual]]
+    _populations: dict[str: list[Individual]]
     ##  _population: list[Individual]
     _num_generations: int
     _num_eras: int
@@ -319,44 +319,6 @@ class Genetic_Algorithm:
     
     def __random_init_island__(self, index: str) -> list[Individual]:
         return [Individual(self.__random_tree__(index=index, max_depth=len(self._variables))) for _ in range(self._population_size)]
-
-    
-    '''def __random_init__(self):
-        population = []
-
-        for i in range(self._population_size):
-            if len(self._variables) == 1:
-                f = Node(f"x0")
-                ind = Individual(f)
-                population.append(ind)
-            else:
-                j = 0
-                operands = []
-                while j < range(int(np.ceil(len(self._variables)*1.5))):
-                    op = random.choice(list(itertools.chain(*numpy_funct.values())))
-                    operands.append(op)
-                    if op.nin > 1:
-                        j += 1
-
-                var = 0
-                op = random.choice(operands)
-                f = Node(op)
-                operands.remove(op)
-
-                while len(operands):
-                    if random.random() < 0.5:
-                        op = random.choice(operands)
-                        f.add_successor(Node(op))
-                        operands.remove(op)
-                    else:
-                        if random.random() < 0.5:
-                            f.add_successor(Node(random.uniform(-5, 5)))
-                        else:
-                            # Fare random anche quale variabile viene inserita
-                            f.add_successor(Node(f"x{var}"))
-                            var += 1
-
-        return population'''
     
     def __random_tree__(self, index: str, max_depth: int, current_depth: int = 0) -> Node:
         """Return a random tree generated according to num_variables"""
@@ -389,43 +351,45 @@ class Genetic_Algorithm:
 
         return new_ind1, new_ind2
 
-    def __random_mutation__(self, ind: Individual) -> Individual:
+    def __random_mutation__(self, ind: Individual, index: str) -> Individual:
         ##  Can I random mutate val into var into funct and viceversa ??  ##
         new_ind = deepcopy(ind)
-        new_ind.gene_mutation(self._variables)
+        new_ind.gene_mutation(self._variables, index)
 
         return new_ind
 
-    def __parent_selection__(self)-> tuple[Individual, Individual]:
-        p1 = random.choice(self._population)
-        p2 = random.choice(self._population)
+    def __parent_selection__(self, index: str)-> tuple[Individual, Individual]:
+        p1 = random.choice(self._populations[index])
+        p2 = random.choice(self._populations[index])
         while p1 == p2:
-            p1 = random.choice(self._population)
-            p2 = random.choice(self._population)
+            p1 = random.choice(self._populations[index])
+            p2 = random.choice(self._populations[index])
         return p1, p2
 
-    def __selection__(self, index: int)-> Individual:
-        return random.choice(self._population[index])
+    def __selection__(self, index: str) -> Individual:
+        return random.choice(self._populations[index])
 
-    def __survival__(self, offsprings: list[Individual], index: int=0) -> list[Individual]:
+    def __survival__(self, offsprings: list[Individual], index: str) -> list[Individual]:
         extended_population = self._populations[index] + offsprings
         extended_population.sort(key=lambda ind: ind.get_fitness())     # ORDERING FROM BEST TO WORSE
-        print([ind.SymRegTree._name for ind in extended_population])
+        #print([ind.SymRegTree._name for ind in extended_population])
         self._populations[index] = extended_population[:self._population_size]  # SURVIVAL SELECTION
 
     def variable_checking(self, value):
         if value.shape[0] != len(self._variables):
             raise ValueError(f"This problem require {len(self._variables)} variables, but you passed only {value.shape[0]} variables !")
     
-    def show_population(self):
-        for ind in self._population:
-            ind.show_function()
+    def show_populations(self):
+        for key, pop in self._populations.items():
+            print(f"{str(key).upper()} island population:")
+            for ind in pop:                
+                ind.show_function()
 
-    def show_individual(self):
-        self._population[0].show_function()
+    def show_individual(self, index: str):
+        self._populations[index][0].show_function()
 
-    def deploy_population(self, val):
-        for ind in self._population:
+    def deploy_population(self, val, index: str):
+        for ind in self._populations[index]:
             print("Computed value: ", ind.deploy_function(val))
 
     def start(self, x: np.ndarray[float], y: np.ndarray[float]):
@@ -434,45 +398,48 @@ class Genetic_Algorithm:
         ##      for ind in pop:
         ##          ind.compute_metrics(x, y)
 
-        [ind.compute_metrics(x, y) for pop in self._populations for ind in pop]
+        [ind.compute_metrics(x, y) for _, pop in self._populations.items() for ind in pop]
 
-        best_ind_history = list()
+        best_ind_history = {key : list() for key in self._populations.keys()}
 
         for e in tqdm(range(self._num_eras), desc="Era", leave=True):
-            pop = []
             for i in tqdm(range(self._num_islands), desc="Island", leave=True):
-                pop = self._populations[i]
+                ## Work on the population of the selected island
+                island = list(self._populations)[i]
                 for g in tqdm(range(self._num_generations), desc="Generation", leave=True):
                     offsprings = list()
-                    for o in tqdm(range(self._num_offsprings), desc="Offspring generated", leave=False):
+                    for o in tqdm(range(self._num_offsprings), desc="Offspring generated", leave=True):
                         if random.random() > 2.0:
-                            ind1, ind2 = self.__parent_selection__(pop)    ## Usare la tecnica dell'UNPACKING
+                            ind1, ind2 = self.__parent_selection__(island)    ## Usare la tecnica dell'UNPACKING
                             ind = self.__crossover__(ind1, ind2)
                         else:
-                            ind = self.__selection__()
+                            ind = self.__selection__(island)
 
-                        off = self.__random_mutation__(ind)
+                        off = self.__random_mutation__(ind, island)
                         del ind
 
                         off.compute_metrics(x, y)
                         offsprings.append(off)
 
-                    self.__survival__(offsprings)
-                    ##  best_ind_history.append(deepcopy(self._population[0]))
+                    self.__survival__(offsprings, island)
+                    best_ind_history[island].append(deepcopy(self._populations[island][0]))
             ## TODO: Before the next era, I contaminate the island's individuals with a function from other island
-            self.__save_best_ind__().show_results()
+
+        self.BEST_IND = self.__save_best_ind__().show_results()
         return best_ind_history
 
-    def __save_best_ind__(self) -> Individual:
-        
-        return min((ind for pop in self._populations.values() for ind in pop), key=lambda x: x.get_fitness())
+    def __save_best_ind__(self) -> Individual:    
+        return min((ind for _, pop in self._populations.items() for ind in pop), key=lambda x: x.get_fitness())
     
+    def get_best_ind(self) -> Individual:
+        return self.BEST_IND
+
     ##  def __save_best_ind__(self, history: list):
     ##      history.append(self._population.sort())
     ##      return history
     
     def plot_fitness_history(self, history: list[Individual]):
-        generations = list(range(1, self._num_generations+1))
+        generations = list(range(1, (self._num_generations+1)* self._num_eras))
         fitness_history = [i.get_fitness() for i in history]
         plt.plot(generations, fitness_history, marker='o', linestyle='-', color='r')
         plt.title('Fitness Over Generations')
@@ -537,3 +504,41 @@ def train(ind: Individual, x: list, y:list) -> float:
   # Crossover needed
   # Modificare l'interpretazione di livello del grafo -> 
   # ###
+
+'''MYVERSION FOR GENERATION OF STARTING POPULATION
+def __random_init__(self):
+        population = []
+
+        for i in range(self._population_size):
+            if len(self._variables) == 1:
+                f = Node(f"x0")
+                ind = Individual(f)
+                population.append(ind)
+            else:
+                j = 0
+                operands = []
+                while j < range(int(np.ceil(len(self._variables)*1.5))):
+                    op = random.choice(list(itertools.chain(*numpy_funct.values())))
+                    operands.append(op)
+                    if op.nin > 1:
+                        j += 1
+
+                var = 0
+                op = random.choice(operands)
+                f = Node(op)
+                operands.remove(op)
+
+                while len(operands):
+                    if random.random() < 0.5:
+                        op = random.choice(operands)
+                        f.add_successor(Node(op))
+                        operands.remove(op)
+                    else:
+                        if random.random() < 0.5:
+                            f.add_successor(Node(random.uniform(-5, 5)))
+                        else:
+                            # Fare random anche quale variabile viene inserita
+                            f.add_successor(Node(f"x{var}"))
+                            var += 1
+
+        return population'''
