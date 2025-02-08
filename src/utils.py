@@ -65,6 +65,7 @@ class Individual:
         ''' MSE + f_length '''
         return self.MSE
     
+    ## STILL not used
     def __compute_level_dict__(self):
         self.levels_dict = defaultdict(list)
         queue = deque([(self.SymRegTree, 0)])  # (Nodo, Livello)
@@ -74,6 +75,10 @@ class Individual:
             if node:
                 self.levels_dict[level].append(node.value)  # Salva il nodo nel livello corretto
                 queue.extend([(n, level + 1) for n in node._successor])
+
+    def __random_subtree__(self):
+        nodes = self.SymRegTree.get_all_nodes()
+        return random.choice(nodes) if nodes else None
 
     def compute_metrics(self, x: np.ndarray[float], y: np.ndarray[float]):
         self.MSE = self.__compute_MSE__(x, y)
@@ -100,7 +105,7 @@ class Individual:
         
         if type_mu==0:
             ## NEW Operand
-            self.SymRegTree.mutate(random.choice(numpy_funct[index]), len(vars))
+            self.SymRegTree.mutate(random.choice(list(itertools.chain(*numpy_funct.values()))), len(vars))
         if type_mu==1:
             ## Change in the Value
             self.SymRegTree.mutate(random.gauss(mu=0, sigma=1), len(vars))
@@ -108,12 +113,8 @@ class Individual:
             ## NEW Variable, if multiple variable
             self.SymRegTree.mutate(random.choice(vars), len(vars))
 
-    def crossover(self, other):
-        
-        if random.choice([True, False]):
-            self.SymRegTree.__leaf_crossover__(other)
-        else:
-            self.SymRegTree.__non_leaf_crossover__(other)
+    def gene_crossover(self):
+        return self.__random_subtree__(), deepcopy(self.SymRegTree)
 
     def get_fitness(self):
         return self.fitness
@@ -205,18 +206,18 @@ class Node:
         else:
             return isinstance(f1, types.FunctionType) and isinstance(f2, np.ufunc)
     
-    def __get_random_node__(self):
-        """ Ritorna un nodo casuale dell'albero """
+    def get_all_nodes(self):
+        """ Ritorna tutti i nodi dell'albero """
         nodes = []
 
-        def traverse(node):
+        def traverse(node: Node):
             if node:
                 nodes.append(node)
-                for child in node._successors:
+                for child in node._successor:
                     traverse(child)
 
         traverse(self)
-        return random.choice(nodes) if nodes else None
+        return nodes
 
     def mutate(self, new, num_var):
         if self.__is_equivalent(self._value, new) and random.random() < 0.5:   ##  TODO update...
@@ -262,7 +263,16 @@ class Node:
         elif isinstance(new_val, numbers.Number):
             self._value += new_val
             self._name = str(self._value)
-            
+    
+    def replace_subtree(self, target, replacement):
+        if self == target:
+            return replacement
+        new_successors = [child.replace_subtree(target, replacement) for child in self._successor]
+        if callable(self._value):
+            return Node(getattr(np, self._name), new_successors)
+        else:
+            return Node(self._value, new_successors)
+    
     def apply(self, var_value):
         return self.__apply_f__(var_value)
     
@@ -296,7 +306,7 @@ class Genetic_Algorithm:
     _num_offsprings: int
     _num_islands: int
     _populations: dict[str: list[Individual]]
-    ##  _population: list[Individual]
+    ##_population: list[Individual]
     _num_generations: int
     _num_eras: int
     _variables: int
@@ -308,27 +318,31 @@ class Genetic_Algorithm:
         self._num_generations = num_gen
         self._num_eras = num_eras
         self._variables = [self.formatting(i) for i in range(num_var)]
-        self._populations = {i: self.__random_init_island__(i) for i in numpy_funct}
-        ##  self._population = self.__random_init__()
+        ##  self._populations["unique"] = []
+        if self._num_islands==1:
+            self._populations = {"unique": self.__random_init__()}
+        else:
+            self._populations = {i: self.__random_init_island__(i) for i in numpy_funct}
+
 
     def formatting(self, idx: int) -> str:
         return f"x{idx}"
 
     def __random_init__(self):
-        return [Individual(self.__random_tree__(len(self._variables))) for _ in range(self._population_size)]
+        return [Individual(self.__random_tree__(island = "unique", max_depth=len(self._variables))) for _ in range(self._population_size)]
     
-    def __random_init_island__(self, index: str) -> list[Individual]:
-        return [Individual(self.__random_tree__(index=index, max_depth=len(self._variables))) for _ in range(self._population_size)]
+    def __random_init_island__(self, island: str) -> list[Individual]:
+        return [Individual(self.__random_tree__(island=island, max_depth=len(self._variables))) for _ in range(self._population_size)]
     
-    def __random_tree__(self, index: str, max_depth: int, current_depth: int = 0) -> Node:
+    def __random_tree__(self, island: str, max_depth: int, current_depth: int = 0) -> Node:
         """Return a random tree generated according to num_variables"""
         # Return a leaf according to a probability that depends on how deep we are
         if random.random() < (current_depth / max_depth):
             return self.__create_leaf__()
         
         # Create a function node
-        op = random.choice(numpy_funct[index])
-        successors = [self.__random_tree__(index, max_depth, current_depth + 1) for _ in range(op.nin)]
+        op = random.choice(list(itertools.chain(*numpy_funct.values())))
+        successors = [self.__random_tree__(island, max_depth, current_depth + 1) for _ in range(op.nin)]
 
         return Node(op, successors)
     
@@ -339,41 +353,52 @@ class Genetic_Algorithm:
         else:
             return Node(random.choice(self._variables))
     
-    def __crossover__(self, ind1: Individual, ind2: Individual) -> Individual:
-        ## TODO
-        new_ind1 = deepcopy(ind1)
-        new_ind2 = deepcopy(ind2)
+    def __crossover__(self, ind1: Individual, ind2: Individual) -> tuple[Individual, Individual]:
+        if not isinstance(ind1, Individual) or not isinstance(ind2, Individual):
+            raise ValueError("Crossover is possible only between two individuals.")
+        
+        subtree1, tree1 = ind1.gene_crossover()
+        subtree2, tree2 = ind2.gene_crossover()
 
-        new_node1 = new_ind1.SymRegTree.__get_random_node__()
-        new_node2 = new_ind2.SymRegTree.__get_random_node__()
+        if subtree1 is None or subtree2 is None:
+            return ind1, ind2   ## No crossover is possible
+        
+        new_tree1 = tree1.replace_subtree(subtree1, subtree2)
+        new_tree2 = tree2.replace_subtree(subtree2, subtree1)
 
-        ## TODO ... How can I choose the node where to perfom crossover?
+        return Individual(new_tree1), Individual(new_tree2)
 
-        return new_ind1, new_ind2
-
-    def __random_mutation__(self, ind: Individual, index: str) -> Individual:
+    def __random_mutation__(self, ind: Individual, island: str) -> Individual:
         ##  Can I random mutate val into var into funct and viceversa ??  ##
         new_ind = deepcopy(ind)
-        new_ind.gene_mutation(self._variables, index)
+        new_ind.gene_mutation(self._variables, island)
 
         return new_ind
 
-    def __parent_selection__(self, index: str)-> tuple[Individual, Individual]:
-        p1 = random.choice(self._populations[index])
-        p2 = random.choice(self._populations[index])
+    def __parent_selection__(self, island: str)-> tuple[Individual, Individual]:
+        p1 = random.choice(self._populations[island])
+        p2 = random.choice(self._populations[island])
         while p1 == p2:
-            p1 = random.choice(self._populations[index])
-            p2 = random.choice(self._populations[index])
+            p1 = random.choice(self._populations[island])
+            p2 = random.choice(self._populations[island])
         return p1, p2
 
-    def __selection__(self, index: str) -> Individual:
-        return random.choice(self._populations[index])
+    def __selection__(self, island: str) -> Individual:
+        return random.choice(self._populations[island])
 
-    def __survival__(self, offsprings: list[Individual], index: str) -> list[Individual]:
-        extended_population = self._populations[index] + offsprings
+    def __survival__(self, offsprings: list[Individual], island: str) -> list[Individual]:
+        extended_population = self._populations[island] + offsprings
         extended_population.sort(key=lambda ind: ind.get_fitness())     # ORDERING FROM BEST TO WORSE
         #print([ind.SymRegTree._name for ind in extended_population])
-        self._populations[index] = extended_population[:self._population_size]  # SURVIVAL SELECTION
+        self._populations[island] = extended_population[:self._population_size]  # SURVIVAL SELECTION
+
+    def __contamination__(self):
+        # TODO: In order to perform contamination:
+        #       select one random individual from each island
+        #       Choose a island where we contaminate a number of individual
+
+
+        ...
 
     def variable_checking(self, value):
         if value.shape[0] != len(self._variables):
@@ -385,11 +410,11 @@ class Genetic_Algorithm:
             for ind in pop:                
                 ind.show_function()
 
-    def show_individual(self, index: str):
-        self._populations[index][0].show_function()
+    def show_individual(self, island: str):
+        self._populations[island][0].show_function()
 
-    def deploy_population(self, val, index: str):
-        for ind in self._populations[index]:
+    def deploy_population(self, val, island: str):
+        for ind in self._populations[island]:
             print("Computed value: ", ind.deploy_function(val))
 
     def start(self, x: np.ndarray[float], y: np.ndarray[float]):
@@ -402,24 +427,39 @@ class Genetic_Algorithm:
 
         best_ind_history = {key : list() for key in self._populations.keys()}
 
-        for e in tqdm(range(self._num_eras), desc="Era", leave=True):
-            for i in tqdm(range(self._num_islands), desc="Island", leave=True):
+        #for e in tqdm(range(self._num_eras), desc="Era", leave=True, position = 0):
+        for e in range(self._num_eras):
+            print("era: ", e)
+            #for i in tqdm(range(self._num_islands), desc="Island", leave=False, position = 1):
+            for i in range(self._num_islands):
+                print("isl: ", i)
                 ## Work on the population of the selected island
                 island = list(self._populations)[i]
-                for g in tqdm(range(self._num_generations), desc="Generation", leave=True):
+                #for g in tqdm(range(self._num_generations), desc="Generation", leave=False, position = 2):
+                for g in range(self._num_generations):
+                    print("gen: ", g)
+
                     offsprings = list()
-                    for o in tqdm(range(self._num_offsprings), desc="Offspring generated", leave=True):
-                        if random.random() > 2.0:
-                            ind1, ind2 = self.__parent_selection__(island)    ## Usare la tecnica dell'UNPACKING
-                            ind = self.__crossover__(ind1, ind2)
+                    #for o in tqdm(range(self._num_offsprings), desc="Offspring generated", leave=False, position = 3):
+                    for o in range(self._num_offsprings):
+                        #print("Off: ", o)
+                        if random.random() < 2.0:
+                            parent1, parent2 = self.__parent_selection__(island)    ## Usare la tecnica dell'UNPACKING
+
+                            ind1, ind2 = self.__crossover__(parent1, parent2)
+                            ind1.show_function()
+                            del parent1, parent2
+                            ##  ind1.show_function()
+                            ##  ind2.show_function()
+                            ind1.compute_metrics(x, y)
+                            ind2.compute_metrics(x, y)
+                            offsprings.extend([ind1, ind2])    
                         else:
                             ind = self.__selection__(island)
-
-                        off = self.__random_mutation__(ind, island)
-                        del ind
-
-                        off.compute_metrics(x, y)
-                        offsprings.append(off)
+                            off = self.__random_mutation__(ind, island)
+                            del ind
+                            off.compute_metrics(x, y)
+                            offsprings.extend(ind)
 
                     self.__survival__(offsprings, island)
                     best_ind_history[island].append(deepcopy(self._populations[island][0]))
