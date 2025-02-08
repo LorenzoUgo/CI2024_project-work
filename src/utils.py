@@ -46,7 +46,6 @@ class Individual:
     def __eq__(self, other: 'Individual'):
         if not isinstance(other, Individual):
             return False
-        
         return self.SymRegTree == other.SymRegTree
     
     def __lt__(self, other: 'Individual'):
@@ -76,8 +75,22 @@ class Individual:
                 self.levels_dict[level].append(node.value)  # Salva il nodo nel livello corretto
                 queue.extend([(n, level + 1) for n in node._successor])
 
-    def __random_subtree__(self):
+    def __random_subtree__(self, avoid_root: bool = False, size_bias: bool = False) -> "Node":
         nodes = self.SymRegTree.get_all_nodes()
+
+        if avoid_root and len(nodes) > 1:
+            nodes.remove(self.SymRegTree)  # Evita la radice
+
+        if size_bias:
+            depths = [node.get_depth() for node in nodes]
+            max_depth = max(depths)
+            
+            # Calcoliamo il peso: più probabilità ai nodi di profondità intermedia
+            weights = [abs(random.gauss(mu=d, sigma=1)) for d in depths]
+            total = sum(weights)
+            weights = [w / total for w in weights] 
+            return random.choices(nodes, weights=weights, k=1)[0]  if nodes else None
+        
         return random.choice(nodes) if nodes else None
 
     def compute_metrics(self, x: np.ndarray[float], y: np.ndarray[float]):
@@ -113,8 +126,8 @@ class Individual:
             ## NEW Variable, if multiple variable
             self.SymRegTree.mutate(random.choice(vars), len(vars))
 
-    def gene_crossover(self):
-        return self.__random_subtree__(), deepcopy(self.SymRegTree)
+    def gene_crossover(self, avoid_root: bool= False, size_bias:bool = False):
+        return self.__random_subtree__(avoid_root, size_bias), deepcopy(self.SymRegTree)
 
     def get_fitness(self):
         return self.fitness
@@ -206,7 +219,7 @@ class Node:
         else:
             return isinstance(f1, types.FunctionType) and isinstance(f2, np.ufunc)
     
-    def get_all_nodes(self):
+    def get_all_nodes(self) -> list["Node"]:
         """ Ritorna tutti i nodi dell'albero """
         nodes = []
 
@@ -287,11 +300,11 @@ class Node:
         else:
             return
           
-    def get_level(self):
-        if self._leaf:
+    def get_depth(self):
+        """Calcola la profondità del nodo corrente rispetto alla radice."""
+        if not self._successor:
             return 0
-        
-        return 1 + max(child.get_level() for child in self._successor)
+        return 1 + max(child.get_depth() for child in self._successor)
 
     '''def draw(self):
         try:
@@ -357,8 +370,8 @@ class Genetic_Algorithm:
         if not isinstance(ind1, Individual) or not isinstance(ind2, Individual):
             raise ValueError("Crossover is possible only between two individuals.")
         
-        subtree1, tree1 = ind1.gene_crossover()
-        subtree2, tree2 = ind2.gene_crossover()
+        subtree1, tree1 = ind1.gene_crossover(avoid_root=True, size_bias=True)
+        subtree2, tree2 = ind2.gene_crossover(avoid_root=True, size_bias=True)
 
         if subtree1 is None or subtree2 is None:
             return ind1, ind2   ## No crossover is possible
@@ -418,12 +431,8 @@ class Genetic_Algorithm:
             print("Computed value: ", ind.deploy_function(val))
 
     def start(self, x: np.ndarray[float], y: np.ndarray[float]):
-
-        ##  for pop in self._populations:
-        ##      for ind in pop:
-        ##          ind.compute_metrics(x, y)
-
-        [ind.compute_metrics(x, y) for _, pop in self._populations.items() for ind in pop]
+        ## Compute metrics
+        [ind.compute_metrics(x, y) for _, pop in self._populations.items() for ind in pop] 
 
         best_ind_history = {key : list() for key in self._populations.keys()}
 
@@ -438,14 +447,12 @@ class Genetic_Algorithm:
                 #for g in tqdm(range(self._num_generations), desc="Generation", leave=False, position = 2):
                 for g in range(self._num_generations):
                     print("gen: ", g)
-
                     offsprings = list()
                     #for o in tqdm(range(self._num_offsprings), desc="Offspring generated", leave=False, position = 3):
                     for o in range(self._num_offsprings):
                         #print("Off: ", o)
                         if random.random() < 2.0:
                             parent1, parent2 = self.__parent_selection__(island)    ## Usare la tecnica dell'UNPACKING
-
                             ind1, ind2 = self.__crossover__(parent1, parent2)
                             ind1.show_function()
                             del parent1, parent2
@@ -536,49 +543,9 @@ def train(ind: Individual, x: list, y:list) -> float:
     return MSE
 
 ###
-  # L'ordinamento conta nelle operazioni binarie --> Mettere in atto controlli/randomicità
-  # Capire se una fuzione e uni o bi arg è importante quando si fanno modifiche o tagli !!
   # Longer function --> Penalty
-  # Genetic Algo / Evolutionary Strategy / ... 
   # Graph representation of function
-  # Crossover needed
   # Modificare l'interpretazione di livello del grafo -> 
+  # Stalla perchè il crossover tende verso tutte funzioni uguali
+  # Forzare ad avere tutte le variabili nell'albero della funzione
   # ###
-
-'''MYVERSION FOR GENERATION OF STARTING POPULATION
-def __random_init__(self):
-        population = []
-
-        for i in range(self._population_size):
-            if len(self._variables) == 1:
-                f = Node(f"x0")
-                ind = Individual(f)
-                population.append(ind)
-            else:
-                j = 0
-                operands = []
-                while j < range(int(np.ceil(len(self._variables)*1.5))):
-                    op = random.choice(list(itertools.chain(*numpy_funct.values())))
-                    operands.append(op)
-                    if op.nin > 1:
-                        j += 1
-
-                var = 0
-                op = random.choice(operands)
-                f = Node(op)
-                operands.remove(op)
-
-                while len(operands):
-                    if random.random() < 0.5:
-                        op = random.choice(operands)
-                        f.add_successor(Node(op))
-                        operands.remove(op)
-                    else:
-                        if random.random() < 0.5:
-                            f.add_successor(Node(random.uniform(-5, 5)))
-                        else:
-                            # Fare random anche quale variabile viene inserita
-                            f.add_successor(Node(f"x{var}"))
-                            var += 1
-
-        return population'''
