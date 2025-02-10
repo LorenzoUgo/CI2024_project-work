@@ -516,11 +516,7 @@ class Genetic_Algorithm:
         w = [0.5, 0.3, 0.2]    # Mutazione var, val, funct / Mutazione subtree / Mutazione strutturale
         
         mutation_type = random.choices(["leaf", "function", "structural"], weights=w)[0]
-        # choose a node in the tree
-        ...
-
-        mutation_type = "structural"
-
+        
         if mutation_type == "structural":
             ind.structural_mutation()
             #   return new_ind.structural_mutation()
