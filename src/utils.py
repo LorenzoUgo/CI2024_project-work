@@ -508,11 +508,15 @@ class Genetic_Algorithm:
 
         return Individual(new_tree1), Individual(new_tree2)
 
+    def __inject_new_individuals__(self, island: str = "unique", rate: float = 0.1):
+        """Add random individuals to avoid stagnation"""
+        num_new = int(self._population_size * rate)
+        return [Individual(self.__random_tree__(island=island, max_depth=len(self._variables))) for _ in range(num_new)]
+
     def __mutation__(self, ind: Individual, island: str = "unique") -> Individual: 
         if random.random() > self._mutation_rate :
-            return # No mutation --> return ind
+            return # No mutation
         
-        ## ITs it necessary? --> new_ind = deepcopy(ind)
         ##  Can I random mutate val into var into funct and viceversa ??  ##
 
         w = [0.4, 0.3, 0.3] if self._mutation_rate > 0.3 else [0.5, 0.3, 0.2]    # Mutazione var, val, funct / Mutazione subtree / Mutazione strutturale
@@ -526,22 +530,26 @@ class Genetic_Algorithm:
             ind.leaf_mutation(self._variables)
             #   return new_ind.leaf_mutation(self._variables)
         elif mutation_type == "function":
-            ind.function_mutation(self._variables, island=island)
+            ind.function_mutation(self._variables, mutation_rate=self._mutation_rate, island=island)
             #   return new_ind.function_mutation(self._variables)
 
     def __parent_selection__(self, island: str = "unique")-> tuple[Individual, Individual]:
         p1 = random.choice(self._populations[island])
         p2 = random.choice(self._populations[island])
-        while p1 == p2:
-            p1 = random.choice(self._populations[island])
+        attempts = 0
+        while p1 == p2 and attempts < 5:
             p2 = random.choice(self._populations[island])
+            attempts += 1
+    
+        if p1 == p2:
+            self.__mutation__(p2, island)
         return p1, p2
     
     def __tournament_selection__(self, island: str = "unique")-> tuple[Individual, Individual]:
         tournament_size = self._population_size//5
-        competitors = random.sample(self._populations, tournament_size)
+        competitors = random.sample(self._populations[island], tournament_size)
         competitors.sort(key = lambda ind: ind.get_fitness())
-        return competitors[0], competitors[1]
+        return competitors[0], competitors[random.randint(1, len(competitors) - 1)]
 
     def __selection__(self, island: str = "unique") -> Individual:
         return random.choice(self._populations[island])
@@ -579,6 +587,8 @@ class Genetic_Algorithm:
 
     def start(self, x: np.ndarray[float], y: np.ndarray[float]):
         no_improvement_count = 0  ##  Generation without improvements
+        self.best_fitness = float("inf")
+
 
         ## Compute metrics
         [ind.compute_metrics(x, y) for _, pop in self._populations.items() for ind in pop] 
@@ -608,21 +618,21 @@ class Genetic_Algorithm:
                         self.best_fitness = current_best.get_fitness()
     
                     if g < self._num_generations//3:      ##  Exploration
-                        self.mutation_rate = max(0.3, min(0.4, self.mutation_rate * 1.1))
+                        self._mutation_rate = max(0.3, min(0.4, self._mutation_rate * 1.1))
                     elif g < 2*self._num_generations//3:    ##  Balancing
-                        self.mutation_rate = max(0.2, min(0.4, self.mutation_rate * (0.9 if no_improvement_count == 0 else 1.1)))
+                        self._mutation_rate = max(0.2, min(0.4, self._mutation_rate * (0.9 if no_improvement_count == 0 else 1.1)))
                     else:       ##  Exploitation
-                        self.mutation_rate = max(0.05, min(0.5, self.mutation_rate * (0.8 if no_improvement_count == 0 else 1.3)))
+                        self._mutation_rate = max(0.05, min(0.5, self._mutation_rate * (0.8 if no_improvement_count == 0 else 1.3)))
                     
                     if no_improvement_count > 10:  ##  If stagnation more than 10 generation --> force max mutation
-                        self.mutation_rate = 0.5 
+                        self._mutation_rate = 0.5 
 
                     print("gen: ", g)
                     offsprings = list()
                     #for o in tqdm(range(self._num_offsprings), desc="Offspring generated", leave=False, position = 3):
                     for o in range(self._num_offsprings):
                         #print("Off: ", o)
-                        parent1, parent2 = self.__parent_selection__(island)    ## Usare la tecnica dell'UNPACKING
+                        parent1, parent2 = self.__tournament_selection__(island)    ## Usare la tecnica dell'UNPACKING
                         ind1, ind2 = self.__crossover__(parent1, parent2)
 
                         self.__mutation__(ind1, island)
@@ -642,6 +652,9 @@ class Genetic_Algorithm:
  
                     self.__survival__(offsprings, island)
                     best_ind_history[island].append(deepcopy(self._populations[island][0]))
+            
+ 
+
             ## TODO: Before the next era, I contaminate the island's individuals with a function from other island
 
         self.BEST_IND = self.__save_best_ind__().show_results()
