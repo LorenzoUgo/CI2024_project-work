@@ -628,7 +628,7 @@ class Genetic_Algorithm:
         return self.BEST_IND
     
     def plot_fitness_history(self, history: list[Individual]):
-        generations = list(range(1, (self._num_generations+1)* self._num_eras))
+        generations = list(range(1, (self._num_generations* self._num_eras)+1))
         fitness_history = [i.get_fitness() for i in history]
         plt.plot(generations, fitness_history, marker='o', linestyle='-', color='r')
         plt.title('Fitness Over Generations')
