@@ -602,19 +602,19 @@ class Genetic_Algorithm:
     
                     # Check the improvement
                     if current_best.get_fitness() >= self.best_fitness:
-                        self.no_improvement_count += 1
+                        no_improvement_count += 1
                     else:
-                        self.no_improvement_count = 0
+                        no_improvement_count = 0
                         self.best_fitness = current_best.get_fitness()
     
                     if g < self._num_generations//3:      ##  Exploration
                         self.mutation_rate = max(0.3, min(0.4, self.mutation_rate * 1.1))
                     elif g < 2*self._num_generations//3:    ##  Balancing
-                        self.mutation_rate = max(0.2, min(0.4, self.mutation_rate * (0.9 if self.no_improvement_count == 0 else 1.1)))
-                    else:           ##  Exploitation
-                        self.mutation_rate = max(0.05, min(0.5, self.mutation_rate * (0.8 if self.no_improvement_count == 0 else 1.3)))
+                        self.mutation_rate = max(0.2, min(0.4, self.mutation_rate * (0.9 if no_improvement_count == 0 else 1.1)))
+                    else:       ##  Exploitation
+                        self.mutation_rate = max(0.05, min(0.5, self.mutation_rate * (0.8 if no_improvement_count == 0 else 1.3)))
                     
-                    if self.no_improvement_count > 10:  ##  If stagnation more than 10 generation --> force max mutation
+                    if no_improvement_count > 10:  ##  If stagnation more than 10 generation --> force max mutation
                         self.mutation_rate = 0.5 
 
                     print("gen: ", g)
