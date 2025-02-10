@@ -282,39 +282,44 @@ class Node:
                     target._successor = (target._successor[0], node)
 
     def __remove__(self, target: "Node"):
-        successors = target._successor
+        if not self._successor or not target:
+            return  # Avoid Errors
+        
+        idx = self._successor.index(target)
+        
+        if len(target._successor) == 1:
+            if len(self._successor) == 1:
+                self._successor = (target._successor[0], )
 
-        if self._successor[0] == target:
-            if len(successors) == 1:
-                self._successor = (successors[0], self._successor[1])
             else:
-                if random.random() < 0.5:
-                    if successors[1]._leaf:
-                        self._successor = (successors[0], self._successor[1])
-                    else:
-                        self._successor = (successors[1], self._successor[1])
+                if idx == 0:
+                    self._successor = (target._successor[0], self._successor[1])
 
                 else:
-                    if successors[0]._leaf:
-                        self._successor = (successors[1], self._successor[1])
-                    else:
-                        self._successor = (successors[0], self._successor[1])
+                    self._successor = (self._successor[0], target._successor[0])
 
         else:
-            if len(successors) == 1:
-                self._successor = (successors[0], self._successor[1])
+            if len(self._successor) == 1:
+                if random.random() < 0.5:    
+                    self._successor = (target._successor[0], )
+                else:
+                    self._successor = (target._successor[1], )
+
             else:
-                if random.random() < 0.5:
-                    if successors[1]._leaf:
-                        self._successor = (successors[0], self._successor[1])
+                if idx == 0:
+                    if random.random() < 0.5:
+                        self._successor = (target._successor[1], self._successor[1])
                     else:
-                        self._successor = (successors[1], self._successor[1])
+                        self._successor = (target._successor[0], self._successor[1])
 
                 else:
-                    if successors[0]._leaf:
-                        self._successor = (successors[1], self._successor[1])
+                    if random.random() < 0.5:
+                        self._successor = (self._successor[0], target._successor[0])
                     else:
-                        self._successor = (successors[0], self._successor[1])
+                        self._successor = (self._successor[0], target._successor[1])
+                
+        del target
+                
 
     def get_all_nodes(self, type: str = "all") -> list["Node"]:
         """ Ritorna tutti i nodi dell'albero """
@@ -600,13 +605,14 @@ class Genetic_Algorithm:
 
                         self.__mutation__(ind1, island)
                         self.__mutation__(ind2, island)
-                        ind1.compute_metrics(x, y)
-                        ind2.compute_metrics(x, y)
-
                         ind1.show_function()
                         ind2.show_function()
                         
                         print()
+
+                        ind1.compute_metrics(x, y)
+                        ind2.compute_metrics(x, y)
+                        
                         if not ind1 == ind2:
                             offsprings.extend([ind1, ind2])
                         else:
