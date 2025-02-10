@@ -64,17 +64,6 @@ class Individual:
         ''' MSE + f_length '''
         return self.MSE
     
-    ## STILL not used
-    def __compute_level_dict__(self):
-        self.levels_dict = defaultdict(list)
-        queue = deque([(self.SymRegTree, 0)])  # (Nodo, Livello)
-
-        while queue:
-            node, level = queue.popleft()
-            if node:
-                self.levels_dict[level].append(node.value)  # Salva il nodo nel livello corretto
-                queue.extend([(n, level + 1) for n in node._successor])
-
     def __select_random_subtree__(self, avoid_root: bool = False, size_bias: bool = False) -> "Node":
         nodes = self.SymRegTree.get_all_nodes()
 
@@ -83,7 +72,6 @@ class Individual:
 
         if size_bias:
             depths = [node.get_depth() for node in nodes]
-            max_depth = max(depths)
             
             # Calcoliamo il peso: più probabilità ai nodi di profondità intermedia
             weights = [abs(random.gauss(mu=d, sigma=1)) for d in depths]
@@ -93,7 +81,7 @@ class Individual:
         
         return random.choice(nodes) if nodes else None
 
-    def __generate_random_subtree__(self, vars: list[str], max_depth: int, current_depth: int = 0):
+    def __generate_random_subtree__(self, vars: list[str], max_depth: int, current_depth: int = 0, island: str = "unique"):
         """Return a random tree generated according to num_variables"""
         # Return a leaf according to a probability that depends on how deep we are
         if random.random() < (current_depth / max_depth):
@@ -103,8 +91,12 @@ class Individual:
                 return Node(random.choice(vars))
         
         # Create a function node
-        op = random.choice(list(itertools.chain(*numpy_funct.values())))
-        successors = [self.__generate_random_subtree__(vars, max_depth, current_depth + 1) for _ in range(op.nin)]
+        if island == "unique":
+            op = random.choice(list(itertools.chain(*numpy_funct.values())))
+        else:
+            op = random.choice(numpy_funct[island])
+
+        successors = [self.__generate_random_subtree__(vars, max_depth, current_depth + 1, island) for _ in range(op.nin)]
 
         return Node(op, successors)
 
@@ -144,17 +136,23 @@ class Individual:
         else:
             return self.SymRegTree.remove_and_merge(node)
 
-    def function_mutation(self, vars:list[str]):
-        w = [0.65, 0.35]
-
+    def function_mutation(self, vars:list[str], mutation_rate: float, island: str = "unique"):
         node = self.SymRegTree.get_random_node(type = "node")
+
+        if mutation_rate > 0.3:
+            w = [0.3, 0.7]
+        else:
+            w = [0.7, 0.3]
         
         if random.choices(["substitution", "new_subtree"], weights=w)[0] == "substitution":
             ## NEW Operand
-            node.mutate(random.choice(list(itertools.chain(*numpy_funct.values()))), len(vars)) 
+            if island == "unique":
+                node.mutate(random.choice(list(itertools.chain(*numpy_funct.values()))), len(vars))
+            else:
+                node.mutate(random.choice(numpy_funct[island]), len(vars)) 
             
         else:
-            new_subtree = self.__generate_random_subtree__(vars, max_depth=node.get_depth())
+            new_subtree = self.__generate_random_subtree__(vars, max_depth=node.get_depth(), island=island)
             self.SymRegTree.replace_subtree(node, new_subtree)
         
     def gene_crossover(self, avoid_root: bool= False, size_bias:bool = False):
@@ -250,8 +248,12 @@ class Node:
         else:
             return isinstance(f1, types.FunctionType) and isinstance(f2, np.ufunc)
     
-    def __insert__(self, target: "Node"):
-        op = random.choice(list(itertools.chain(*numpy_funct.values())))
+    def __insert__(self, target: "Node", island: str = "unique"):
+
+        if island == "unique":
+            op = random.choice(list(itertools.chain(*numpy_funct.values())))
+        else:
+            op = random.choice(numpy_funct[island])
 
         if op.nin == 1:
             if len(target._successor) == 1:
@@ -347,13 +349,13 @@ class Node:
 
         return random.choice(self.get_all_nodes(type))
 
-    def insert_intermediate_node(self, target: "Node"):
+    def insert_intermediate_node(self, target: "Node", island: str = "unique"):
         if self.__is_equivalent(self._value, target):
-            self.__insert__(target)
+            self.__insert__(target, island=island)
             return self
         else:
             for child in self._successor:
-                child.insert_intermediate_node(target)
+                child.insert_intermediate_node(target, island)
         
     def remove_and_merge(self, target):
         if self._successor:
@@ -456,7 +458,8 @@ class Genetic_Algorithm:
         self._num_generations = num_gen
         self._num_eras = num_eras
         self._variables = [self.formatting(i) for i in range(num_var)]
-        ##  self._populations["unique"] = []
+        self._mutation_rate = 0.3       ##  High Exploration
+
         if self._num_islands == 1:
             self._populations = {"unique": self.__random_init_island__()}
         else:
@@ -465,9 +468,6 @@ class Genetic_Algorithm:
     def formatting(self, idx: int) -> str:
         return f"x{idx}"
 
-    ## def __random_init__(self):
-    ##     return [Individual(self.__random_tree__(island="unique", max_depth=len(self._variables))) for _ in range(self._population_size)]
-    
     def __random_init_island__(self, island: str = "unique") -> list[Individual]:
         return [Individual(self.__random_tree__(island=island, max_depth=len(self._variables))) for _ in range(self._population_size)]
     
@@ -478,7 +478,10 @@ class Genetic_Algorithm:
             return self.__create_leaf__()
         
         # Create a function node
-        op = random.choice(list(itertools.chain(*numpy_funct.values())))
+        if island == "unique":
+            op = random.choice(list(itertools.chain(*numpy_funct.values())))
+        else:
+            op = random.choice(numpy_funct[island])
         successors = [self.__random_tree__(max_depth, current_depth + 1, island) for _ in range(op.nin)]
 
         return Node(op, successors)
@@ -506,13 +509,13 @@ class Genetic_Algorithm:
         return Individual(new_tree1), Individual(new_tree2)
 
     def __mutation__(self, ind: Individual, island: str = "unique") -> Individual: 
-        if random.random() > 1.0 :
+        if random.random() > self._mutation_rate :
             return # No mutation --> return ind
         
         ## ITs it necessary? --> new_ind = deepcopy(ind)
         ##  Can I random mutate val into var into funct and viceversa ??  ##
 
-        w = [0.5, 0.3, 0.2]    # Mutazione var, val, funct / Mutazione subtree / Mutazione strutturale
+        w = [0.4, 0.3, 0.3] if self._mutation_rate > 0.3 else [0.5, 0.3, 0.2]    # Mutazione var, val, funct / Mutazione subtree / Mutazione strutturale
         
         mutation_type = random.choices(["leaf", "function", "structural"], weights=w)[0]
         
@@ -523,7 +526,7 @@ class Genetic_Algorithm:
             ind.leaf_mutation(self._variables)
             #   return new_ind.leaf_mutation(self._variables)
         elif mutation_type == "function":
-            ind.function_mutation(self._variables)
+            ind.function_mutation(self._variables, island=island)
             #   return new_ind.function_mutation(self._variables)
 
     def __parent_selection__(self, island: str = "unique")-> tuple[Individual, Individual]:
@@ -575,6 +578,8 @@ class Genetic_Algorithm:
             print("Computed value: ", ind.deploy_function(val))
 
     def start(self, x: np.ndarray[float], y: np.ndarray[float]):
+        no_improvement_count = 0  ##  Generation without improvements
+
         ## Compute metrics
         [ind.compute_metrics(x, y) for _, pop in self._populations.items() for ind in pop] 
 
@@ -590,6 +595,28 @@ class Genetic_Algorithm:
                 island = list(self._populations)[i]
                 #for g in tqdm(range(self._num_generations), desc="Generation", leave=False, position = 2):
                 for g in range(self._num_generations):
+                    self._mutation_rate = max(0.05, 0.3 * (1 - g / self._num_generations))
+
+                    # Troviamo il miglior individuo attuale
+                    current_best = min(self._populations[island], key=lambda ind: ind.get_fitness())
+    
+                    # Check the improvement
+                    if current_best.get_fitness() >= self.best_fitness:
+                        self.no_improvement_count += 1
+                    else:
+                        self.no_improvement_count = 0
+                        self.best_fitness = current_best.get_fitness()
+    
+                    if g < self._num_generations//3:      ##  Exploration
+                        self.mutation_rate = max(0.3, min(0.4, self.mutation_rate * 1.1))
+                    elif g < 2*self._num_generations//3:    ##  Balancing
+                        self.mutation_rate = max(0.2, min(0.4, self.mutation_rate * (0.9 if self.no_improvement_count == 0 else 1.1)))
+                    else:           ##  Exploitation
+                        self.mutation_rate = max(0.05, min(0.5, self.mutation_rate * (0.8 if self.no_improvement_count == 0 else 1.3)))
+                    
+                    if self.no_improvement_count > 10:  ##  If stagnation more than 10 generation --> force max mutation
+                        self.mutation_rate = 0.5 
+
                     print("gen: ", g)
                     offsprings = list()
                     #for o in tqdm(range(self._num_offsprings), desc="Offspring generated", leave=False, position = 3):
