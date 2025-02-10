@@ -320,7 +320,6 @@ class Node:
                 
         del target
                 
-
     def get_all_nodes(self, type: str = "all") -> list["Node"]:
         """ Ritorna tutti i nodi dell'albero """
         nodes = []
@@ -458,21 +457,21 @@ class Genetic_Algorithm:
         self._num_eras = num_eras
         self._variables = [self.formatting(i) for i in range(num_var)]
         ##  self._populations["unique"] = []
-        if self._num_islands==1:
-            self._populations = {"unique": self.__random_init__()}
+        if self._num_islands == 1:
+            self._populations = {"unique": self.__random_init_island__()}
         else:
             self._populations = {i: self.__random_init_island__(i) for i in numpy_funct}
 
     def formatting(self, idx: int) -> str:
         return f"x{idx}"
 
-    def __random_init__(self):
-        return [Individual(self.__random_tree__(island = "unique", max_depth=len(self._variables))) for _ in range(self._population_size)]
+    ## def __random_init__(self):
+    ##     return [Individual(self.__random_tree__(island="unique", max_depth=len(self._variables))) for _ in range(self._population_size)]
     
-    def __random_init_island__(self, island: str) -> list[Individual]:
+    def __random_init_island__(self, island: str = "unique") -> list[Individual]:
         return [Individual(self.__random_tree__(island=island, max_depth=len(self._variables))) for _ in range(self._population_size)]
     
-    def __random_tree__(self, island: str, max_depth: int, current_depth: int = 0) -> Node:
+    def __random_tree__(self, max_depth: int, current_depth: int = 0, island: str="unique") -> Node:
         """Return a random tree generated according to num_variables"""
         # Return a leaf according to a probability that depends on how deep we are
         if random.random() < (current_depth / max_depth):
@@ -480,7 +479,7 @@ class Genetic_Algorithm:
         
         # Create a function node
         op = random.choice(list(itertools.chain(*numpy_funct.values())))
-        successors = [self.__random_tree__(island, max_depth, current_depth + 1) for _ in range(op.nin)]
+        successors = [self.__random_tree__(max_depth, current_depth + 1, island) for _ in range(op.nin)]
 
         return Node(op, successors)
     
@@ -506,7 +505,7 @@ class Genetic_Algorithm:
 
         return Individual(new_tree1), Individual(new_tree2)
 
-    def __mutation__(self, ind: Individual, island: str) -> Individual: 
+    def __mutation__(self, ind: Individual, island: str = "unique") -> Individual: 
         if random.random() > 1.0 :
             return # No mutation --> return ind
         
@@ -527,7 +526,7 @@ class Genetic_Algorithm:
             ind.function_mutation(self._variables)
             #   return new_ind.function_mutation(self._variables)
 
-    def __parent_selection__(self, island: str)-> tuple[Individual, Individual]:
+    def __parent_selection__(self, island: str = "unique")-> tuple[Individual, Individual]:
         p1 = random.choice(self._populations[island])
         p2 = random.choice(self._populations[island])
         while p1 == p2:
@@ -535,16 +534,16 @@ class Genetic_Algorithm:
             p2 = random.choice(self._populations[island])
         return p1, p2
     
-    def __tournament_selection__(self, island: str)-> tuple[Individual, Individual]:
+    def __tournament_selection__(self, island: str = "unique")-> tuple[Individual, Individual]:
         tournament_size = self._population_size//5
         competitors = random.sample(self._populations, tournament_size)
         competitors.sort(key = lambda ind: ind.get_fitness())
         return competitors[0], competitors[1]
 
-    def __selection__(self, island: str) -> Individual:
+    def __selection__(self, island: str = "unique") -> Individual:
         return random.choice(self._populations[island])
 
-    def __survival__(self, offsprings: list[Individual], island: str) -> list[Individual]:
+    def __survival__(self, offsprings: list[Individual], island: str = "unique") -> list[Individual]:
         extended_population = self._populations[island] + offsprings
         extended_population.sort(key=lambda ind: ind.get_fitness())     # ORDERING FROM BEST TO WORSE
         #print([ind.SymRegTree._name for ind in extended_population])
@@ -568,10 +567,10 @@ class Genetic_Algorithm:
             for ind in pop:                
                 ind.show_function()
 
-    def show_individual(self, island: str):
+    def show_individual(self, island: str = "unique"):
         self._populations[island][0].show_function()
 
-    def deploy_population(self, val, island: str):
+    def deploy_population(self, val, island: str = "unique"):
         for ind in self._populations[island]:
             print("Computed value: ", ind.deploy_function(val))
 
