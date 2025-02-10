@@ -75,7 +75,7 @@ class Individual:
                 self.levels_dict[level].append(node.value)  # Salva il nodo nel livello corretto
                 queue.extend([(n, level + 1) for n in node._successor])
 
-    def __random_subtree__(self, avoid_root: bool = False, size_bias: bool = False) -> "Node":
+    def __select_random_subtree__(self, avoid_root: bool = False, size_bias: bool = False) -> "Node":
         nodes = self.SymRegTree.get_all_nodes()
 
         if avoid_root and len(nodes) > 1:
@@ -93,6 +93,21 @@ class Individual:
         
         return random.choice(nodes) if nodes else None
 
+    def __generate_random_subtree__(self, vars: list[str], max_depth: int, current_depth: int = 0):
+        """Return a random tree generated according to num_variables"""
+        # Return a leaf according to a probability that depends on how deep we are
+        if random.random() < (current_depth / max_depth):
+            if random.random() < 0.3:
+                return Node(random.uniform(-1, 1))
+            else:
+                return Node(random.choice(vars))
+        
+        # Create a function node
+        op = random.choice(list(itertools.chain(*numpy_funct.values())))
+        successors = [self.__generate_random_subtree__(vars, max_depth, current_depth + 1) for _ in range(op.nin)]
+
+        return Node(op, successors)
+
     def compute_metrics(self, x: np.ndarray[float], y: np.ndarray[float]):
         self.MSE = self.__compute_MSE__(x, y)
         self.fitness = self.__compute_fitness__()
@@ -109,25 +124,41 @@ class Individual:
         ## self.show_function()
         return self.SymRegTree.apply(val)
 
-    def gene_mutation(self, vars, index: str):
-        ''' 
-        What do I want to mutate? 
-        Can I mutate a node into a different type?
-        '''
-        type_mu = random.choice(range(3))
-        
-        if type_mu==0:
-            ## NEW Operand
-            self.SymRegTree.mutate(random.choice(list(itertools.chain(*numpy_funct.values()))), len(vars))
-        if type_mu==1:
-            ## Change in the Value
-            self.SymRegTree.mutate(random.gauss(mu=0, sigma=1), len(vars))
-        elif type_mu==2 and len(vars) > 1:
-            ## NEW Variable, if multiple variable
-            self.SymRegTree.mutate(random.choice(vars), len(vars))
+    def leaf_mutation(self, vars: list[str]):
+        ''''''
+        node = self.SymRegTree.get_random_node(type = "leaf")
 
+        ## Change DIRECTLY the node OR pass to the tree the trget node and search and reach it
+        if isinstance(node._value, numbers.Number):
+            ## Change in the Value
+            node.mutate(random.gauss(mu=0, sigma=1))
+        elif isinstance(node._value, str):
+            ## NEW Variable
+            node.mutate(random.choice(vars), len(vars))
+
+    def structural_mutation(self):
+        node = self.SymRegTree.get_random_node(type = "node")   ##  Nodo target da cercare 
+
+        if random.choice(["insert_node", "remove_node"]) == "insert_node":
+            return self.SymRegTree.insert_intermediate_node(node)
+        else:
+            return self.SymRegTree.remove_and_merge(node)
+
+    def function_mutation(self, vars:list[str]):
+        w = [0.65, 0.35]
+
+        node = self.SymRegTree.get_random_node(type = "node")
+        
+        if random.choices(["substitution", "new_subtree"], weights=w)[0] == "substitution":
+            ## NEW Operand
+            node.mutate(random.choice(list(itertools.chain(*numpy_funct.values()))), len(vars)) 
+            
+        else:
+            new_subtree = self.__generate_random_subtree__(vars, max_depth=node.get_depth())
+            self.SymRegTree.replace_subtree(node, new_subtree)
+        
     def gene_crossover(self, avoid_root: bool= False, size_bias:bool = False):
-        return self.__random_subtree__(avoid_root, size_bias), deepcopy(self.SymRegTree)
+        return self.__select_random_subtree__(avoid_root, size_bias), deepcopy(self.SymRegTree)
 
     def get_fitness(self):
         return self.fitness
@@ -219,31 +250,118 @@ class Node:
         else:
             return isinstance(f1, types.FunctionType) and isinstance(f2, np.ufunc)
     
-    def get_all_nodes(self) -> list["Node"]:
+    def __insert__(self, target: "Node"):
+        op = random.choice(list(itertools.chain(*numpy_funct.values())))
+
+        if op.nin == 1:
+            if len(target._successor) == 1:
+                node = Node(op, target._successor)
+                target._successor = (node, )
+
+            else:
+                if random.random() < 0.5:
+                    node = Node(op, target._successor[0])
+                    target._successor = (node, target._successor[1])
+                
+                else:
+                    node = Node(op, target._successor[1])
+                    target._successor = (target._successor[0], node)
+            
+        else:
+            if len(target._successor) == 1:
+                node = Node(op, [target._successor[0], Node(random.uniform(-1, 1), ())])
+                target._successor = (node, )
+
+            else:
+                if random.random() < 0.5:
+                    node = Node(op, [target._successor[0], Node(random.uniform(-1, 1), ())])
+                    target._successor = (node, target._successor[1])
+                
+                else:
+                    node = Node(op, [Node(random.uniform(-1, 1), ()), target._successor[1]])
+                    target._successor = (target._successor[0], node)
+
+    def __remove__(self, target: "Node"):
+        successors = target._successor
+
+        if self._successor[0] == target:
+            if len(successors) == 1:
+                self._successor = (successors[0], self._successor[1])
+            else:
+                if random.random() < 0.5:
+                    if successors[1]._leaf:
+                        self._successor = (successors[0], self._successor[1])
+                    else:
+                        self._successor = (successors[1], self._successor[1])
+
+                else:
+                    if successors[0]._leaf:
+                        self._successor = (successors[1], self._successor[1])
+                    else:
+                        self._successor = (successors[0], self._successor[1])
+
+        else:
+            if len(successors) == 1:
+                self._successor = (successors[0], self._successor[1])
+            else:
+                if random.random() < 0.5:
+                    if successors[1]._leaf:
+                        self._successor = (successors[0], self._successor[1])
+                    else:
+                        self._successor = (successors[1], self._successor[1])
+
+                else:
+                    if successors[0]._leaf:
+                        self._successor = (successors[1], self._successor[1])
+                    else:
+                        self._successor = (successors[0], self._successor[1])
+
+    def get_all_nodes(self, type: str = "all") -> list["Node"]:
         """ Ritorna tutti i nodi dell'albero """
         nodes = []
 
         def traverse(node: Node):
             if node:
-                nodes.append(node)
+                if type == "all":
+                    nodes.append(node)
+
+                elif type == "leaf":
+                    if not node._successor:     ##  If it has not successors, it's a leaf
+                        nodes.append(node)
+
+                elif type == "node":
+                    if node._successor:     ##  If it has successors, it's a node
+                        nodes.append(node) 
+
                 for child in node._successor:
                     traverse(child)
 
         traverse(self)
         return nodes
 
-    def mutate(self, new, num_var):
-        if self.__is_equivalent(self._value, new) and random.random() < 0.5:   ##  TODO update...
-            self.__mutate__(new, num_var)
-            return True
+    def get_random_node(self, type:str = "all") -> "Node":
 
-        for child in self._successor:
-            if child.mutate(new, num_var):
-                return True
+        return random.choice(self.get_all_nodes(type))
+
+    def insert_intermediate_node(self, target: "Node"):
+        if self.__is_equivalent(self._value, target):
+            self.__insert__(target)
+        else:
+            for child in self._successor:
+                child.insert_intermediate_node(target)
         
-        return False
+    def remove_and_merge(self, target):
+        if self._successor:
+            if target in self._successor:
+                self.__remove__(target)
+            else:
+                for child in self._successor:
+                    child.remove_and_merge(target)
 
-    def __mutate__(self, new_val: np.ufunc, num_var: int):
+    def mutate(self, new, num_var: int = 1):
+        self.__mutate__(new, num_var)
+
+    def __mutate__(self, new_val: np.ufunc, num_var: int = 1):
         if callable(new_val):
             ##  TODO ...
             def _f(*_args, **_kwargs):
@@ -254,6 +372,7 @@ class Node:
                     ##  print(e, self._successor) 
                     return np.nan
                 ##  return new_val(*_args)
+            
             self._value = _f
             self._name = new_val.__name__
 
@@ -337,7 +456,6 @@ class Genetic_Algorithm:
         else:
             self._populations = {i: self.__random_init_island__(i) for i in numpy_funct}
 
-
     def formatting(self, idx: int) -> str:
         return f"x{idx}"
 
@@ -381,12 +499,25 @@ class Genetic_Algorithm:
 
         return Individual(new_tree1), Individual(new_tree2)
 
-    def __random_mutation__(self, ind: Individual, island: str) -> Individual:
-        ##  Can I random mutate val into var into funct and viceversa ??  ##
+    def __mutation__(self, ind: Individual, island: str) -> Individual: 
+        if random.random() > 0.8 :
+            return ind  # No mutation
+        
         new_ind = deepcopy(ind)
-        new_ind.gene_mutation(self._variables, island)
+        ##  Can I random mutate val into var into funct and viceversa ??  ##
 
-        return new_ind
+        w = [0.5, 0.3, 0.2]    # Mutazione var, val, funct / Mutazione subtree / Mutazione strutturale
+        
+        mutation_type = random.choices(["leaf", "function", "structural"], weights=w)[0]
+        # choose a node in the tree
+        ...
+
+        if mutation_type == "structural":
+            return new_ind.structural_mutation()
+        elif mutation_type == "leaf":
+            return new_ind.leaf_mutation(self._variables)
+        elif mutation_type == "function":
+            return new_ind.function_mutation(self._variables)
 
     def __parent_selection__(self, island: str)-> tuple[Individual, Individual]:
         p1 = random.choice(self._populations[island])
@@ -451,23 +582,19 @@ class Genetic_Algorithm:
                     #for o in tqdm(range(self._num_offsprings), desc="Offspring generated", leave=False, position = 3):
                     for o in range(self._num_offsprings):
                         #print("Off: ", o)
-                        if random.random() < 2.0:
-                            parent1, parent2 = self.__parent_selection__(island)    ## Usare la tecnica dell'UNPACKING
-                            ind1, ind2 = self.__crossover__(parent1, parent2)
-                            ind1.show_function()
-                            del parent1, parent2
-                            ##  ind1.show_function()
-                            ##  ind2.show_function()
-                            ind1.compute_metrics(x, y)
-                            ind2.compute_metrics(x, y)
-                            offsprings.extend([ind1, ind2])    
-                        else:
-                            ind = self.__selection__(island)
-                            off = self.__random_mutation__(ind, island)
-                            del ind
-                            off.compute_metrics(x, y)
-                            offsprings.extend(ind)
+                        parent1, parent2 = self.__parent_selection__(island)    ## Usare la tecnica dell'UNPACKING
+                        ind1, ind2 = self.__crossover__(parent1, parent2)
 
+                        ind1.show_function()
+                        ind2.show_function()
+                        
+                        print()
+
+                        ind1 = self.__mutation__(ind2, island)
+                        ind2 = self.__mutation__(ind1, island)
+                        ind1.compute_metrics(x, y),
+                        ind2.compute_metrics(x, y)
+                        offsprings.extend([ind1, ind2])
                     self.__survival__(offsprings, island)
                     best_ind_history[island].append(deepcopy(self._populations[island][0]))
             ## TODO: Before the next era, I contaminate the island's individuals with a function from other island
@@ -480,10 +607,6 @@ class Genetic_Algorithm:
     
     def get_best_ind(self) -> Individual:
         return self.BEST_IND
-
-    ##  def __save_best_ind__(self, history: list):
-    ##      history.append(self._population.sort())
-    ##      return history
     
     def plot_fitness_history(self, history: list[Individual]):
         generations = list(range(1, (self._num_generations+1)* self._num_eras))
@@ -548,4 +671,6 @@ def train(ind: Individual, x: list, y:list) -> float:
   # Modificare l'interpretazione di livello del grafo -> 
   # Stalla perchè il crossover tende verso tutte funzioni uguali
   # Forzare ad avere tutte le variabili nell'albero della funzione
+  # 3 tipi di mutazione: Mutazione var, val e funct; Mutazione Sottoalbero; Mutazione Strutturali
+  # MUTATION RATE ADATTIVO !! --> self.mutation_rate = max(0.05, 0.3 * (1 - gen / max_generations))
   # ###
