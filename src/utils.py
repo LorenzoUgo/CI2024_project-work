@@ -346,6 +346,7 @@ class Node:
     def insert_intermediate_node(self, target: "Node"):
         if self.__is_equivalent(self._value, target):
             self.__insert__(target)
+            return self
         else:
             for child in self._successor:
                 child.insert_intermediate_node(target)
@@ -354,6 +355,7 @@ class Node:
         if self._successor:
             if target in self._successor:
                 self.__remove__(target)
+                return self
             else:
                 for child in self._successor:
                     child.remove_and_merge(target)
@@ -500,10 +502,10 @@ class Genetic_Algorithm:
         return Individual(new_tree1), Individual(new_tree2)
 
     def __mutation__(self, ind: Individual, island: str) -> Individual: 
-        if random.random() > 0.8 :
-            return ind  # No mutation
+        if random.random() > 1.0 :
+            return # No mutation --> return ind
         
-        new_ind = deepcopy(ind)
+        ## ITs it necessary? --> new_ind = deepcopy(ind)
         ##  Can I random mutate val into var into funct and viceversa ??  ##
 
         w = [0.5, 0.3, 0.2]    # Mutazione var, val, funct / Mutazione subtree / Mutazione strutturale
@@ -512,12 +514,17 @@ class Genetic_Algorithm:
         # choose a node in the tree
         ...
 
+        mutation_type = "structural"
+
         if mutation_type == "structural":
-            return new_ind.structural_mutation()
+            ind.structural_mutation()
+            #   return new_ind.structural_mutation()
         elif mutation_type == "leaf":
-            return new_ind.leaf_mutation(self._variables)
+            ind.leaf_mutation(self._variables)
+            #   return new_ind.leaf_mutation(self._variables)
         elif mutation_type == "function":
-            return new_ind.function_mutation(self._variables)
+            ind.function_mutation(self._variables)
+            #   return new_ind.function_mutation(self._variables)
 
     def __parent_selection__(self, island: str)-> tuple[Individual, Individual]:
         p1 = random.choice(self._populations[island])
@@ -526,6 +533,12 @@ class Genetic_Algorithm:
             p1 = random.choice(self._populations[island])
             p2 = random.choice(self._populations[island])
         return p1, p2
+    
+    def __tournament_selection__(self, island: str)-> tuple[Individual, Individual]:
+        tournament_size = self._population_size//5
+        competitors = random.sample(self._populations, tournament_size)
+        competitors.sort(key = lambda ind: ind.get_fitness())
+        return competitors[0], competitors[1]
 
     def __selection__(self, island: str) -> Individual:
         return random.choice(self._populations[island])
@@ -585,16 +598,20 @@ class Genetic_Algorithm:
                         parent1, parent2 = self.__parent_selection__(island)    ## Usare la tecnica dell'UNPACKING
                         ind1, ind2 = self.__crossover__(parent1, parent2)
 
+                        self.__mutation__(ind1, island)
+                        self.__mutation__(ind2, island)
+                        ind1.compute_metrics(x, y)
+                        ind2.compute_metrics(x, y)
+
                         ind1.show_function()
                         ind2.show_function()
                         
                         print()
-
-                        ind1 = self.__mutation__(ind2, island)
-                        ind2 = self.__mutation__(ind1, island)
-                        ind1.compute_metrics(x, y),
-                        ind2.compute_metrics(x, y)
-                        offsprings.extend([ind1, ind2])
+                        if not ind1 == ind2:
+                            offsprings.extend([ind1, ind2])
+                        else:
+                            offsprings.append(ind1)
+ 
                     self.__survival__(offsprings, island)
                     best_ind_history[island].append(deepcopy(self._populations[island][0]))
             ## TODO: Before the next era, I contaminate the island's individuals with a function from other island
