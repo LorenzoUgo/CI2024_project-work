@@ -65,10 +65,9 @@ class Individual:
         tree_size = self.SymRegTree.get_size()
         return self.MSE + penalty * tree_size
     
-
     def __select_random_subtree__(self, avoid_root: bool = False, size_bias: bool = False) -> "Node":
         nodes = self.SymRegTree.get_all_nodes()
-
+        ### consenti o root o foglia --> 
         if avoid_root and len(nodes) > 1:
             nodes.remove(self.SymRegTree)  # Evita la radice
 
@@ -104,7 +103,7 @@ class Individual:
 
     def compute_metrics(self, x: np.ndarray[float], y: np.ndarray[float]):
         self.MSE = self.__compute_MSE__(x, y)
-        self.fitness = self.__compute_fitness__(penalty=1.0)
+        self.fitness = self.__compute_fitness__()
         
     def show_function(self):
         print(self.SymRegTree)
@@ -340,10 +339,12 @@ class Node:
                     traverse(child)
 
         traverse(self)
+        if not nodes:
+            type = "all"
+            traverse(self)
         return nodes
 
     def get_random_node(self, type:str = "all") -> "Node":
-
         return random.choice(self.get_all_nodes(type))
 
     def insert_intermediate_node(self, target: "Node", island: str = "unique"):
@@ -564,7 +565,7 @@ class Genetic_Algorithm:
 
         len_new = len (new_inds)
 
-        random.shuffle(self._populations[island])
+        ## random.shuffle(self._populations[island])
         keep_ind = self._population_size-len_new
         self._populations[island] = self._populations[island][:keep_ind] + new_inds
         print()
@@ -633,7 +634,7 @@ class Genetic_Algorithm:
             print([len(x[1]) for  x in self._populations.items()])
             #for i in tqdm(range(self._num_islands), desc="Island", leave=False, position = 1):
             for i in range(self._num_islands):
-                #print("isl: ", i)
+                print("isl: ", i)
                 ## Work on the population of the selected island
                 island = list(self._populations)[i]
                 #for g in tqdm(range(self._num_generations), desc="Generation", leave=False, position = 2):
@@ -660,7 +661,7 @@ class Genetic_Algorithm:
                     if no_improvement_count > 10:  ##  If stagnation more than 10 generation --> force max mutation
                         self._mutation_rate = 0.5 
 
-                    #print("gen: ", g)
+                    print("gen: ", g)
                     offsprings = list()
                     #for o in tqdm(range(self._num_offsprings), desc="Offspring generated", leave=False, position = 3):
                     for o in range(self._num_offsprings):
@@ -685,15 +686,16 @@ class Genetic_Algorithm:
  
                     self.__survival__(offsprings, island)
                     best_ind_history[island].append(deepcopy(self._populations[island][0]))
-            
-            print([len(x[1]) for  x in self._populations.items()])
+
+                ##TODO : Elaborate any low of diversity in poulation
+
             if self._num_islands > 1:
                 self.__migration__() 
             else:
                 self.__contamination_1_island__(x, y)
             ## TODO: Before the next era, I contaminate the island's individuals with a function from other island
 
-        self.BEST_IND = self.__save_best_ind__().show_results()
+        self.BEST_IND = self.__save_best_ind__().show_results()     ## TODO: FIx the really best
         return best_ind_history
 
     def __save_best_ind__(self) -> Individual:    
@@ -760,10 +762,6 @@ def train(ind: Individual, x: list, y:list) -> float:
     return MSE
 
 ###
-  # Longer function --> Penalty
   # Graph representation of function
   # Modificare l'interpretazione di livello del grafo -> 
-  # Stalla perchè il crossover tende verso tutte funzioni uguali
-  # Forzare ad avere tutte le variabili nell'albero della funzione
-  # 3 tipi di mutazione: Mutazione var, val e funct; Mutazione Sottoalbero; Mutazione Strutturali
   # ###
