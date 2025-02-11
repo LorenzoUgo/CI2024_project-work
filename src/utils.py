@@ -60,10 +60,12 @@ class Individual:
             return np.inf
         return MSE
     
-    def __compute_fitness__(self):
+    def __compute_fitness__(self, penalty: float = 1.0):
         ''' MSE + f_length '''
-        return self.MSE
+        tree_size = self.SymRegTree.get_size()
+        return self.MSE + penalty*tree_size
     
+
     def __select_random_subtree__(self, avoid_root: bool = False, size_bias: bool = False) -> "Node":
         nodes = self.SymRegTree.get_all_nodes()
 
@@ -105,11 +107,6 @@ class Individual:
         self.fitness = self.__compute_fitness__()
         
     def show_function(self):
-        ##  print(self.SymRegTree._name)
-        ##  if len(self.SymRegTree._successor)>1:
-        ##      print(self.SymRegTree._successor[1]._name)
-        ##  print(self.SymRegTree._successor[0]._name)
-
         print(self.SymRegTree)
 
     def deploy_function(self, val):
@@ -433,13 +430,15 @@ class Node:
             return 0
         return 1 + max(child.get_depth() for child in self._successor)
 
+    def get_size(self) -> int:
+        return 1 + sum(child.get_size() for child in self._successor)
+    
     '''def draw(self):
         try:
             return draw(self)
         except Exception as msg:
             warnings.warn(f"Drawing not available ({msg})", UserWarning, 2)
             return None'''
-
 
 class Genetic_Algorithm:
     _population_size: int
@@ -564,9 +563,21 @@ class Genetic_Algorithm:
         # TODO: In order to perform contamination:
         #       select one random individual from each island
         #       Choose a island where we contaminate a number of individual
-
-
         ...
+    def __compute_population_diversity__(self, island: str = "unique"):
+        pop = self._populations[island]
+
+        if len(pop) <= 1:
+            return 0, 0
+
+        unique_trees_rate = len(set(ind for ind in pop)) / self._population_size
+
+        # Calcola la varianza della fitness
+        fitness_values = [ind.get_fitness() for ind in pop]
+        fitness_variance = np.var(fitness_values)
+
+        return unique_trees_rate, fitness_variance
+
 
     def variable_checking(self, value):
         if value.shape[0] != len(self._variables):
@@ -653,7 +664,7 @@ class Genetic_Algorithm:
                     self.__survival__(offsprings, island)
                     best_ind_history[island].append(deepcopy(self._populations[island][0]))
             
- 
+            ##  self.__contamination__() 
 
             ## TODO: Before the next era, I contaminate the island's individuals with a function from other island
 
@@ -730,5 +741,4 @@ def train(ind: Individual, x: list, y:list) -> float:
   # Stalla perchè il crossover tende verso tutte funzioni uguali
   # Forzare ad avere tutte le variabili nell'albero della funzione
   # 3 tipi di mutazione: Mutazione var, val e funct; Mutazione Sottoalbero; Mutazione Strutturali
-  # MUTATION RATE ADATTIVO !! --> self.mutation_rate = max(0.05, 0.3 * (1 - gen / max_generations))
   # ###
