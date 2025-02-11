@@ -24,11 +24,10 @@ warnings.simplefilter("ignore", category=RuntimeWarning)
 
 numpy_funct = {
     "arithmetic":       [np.add, np.multiply, np.divide, np.subtract, np.floor_divide, np.power, np.mod],
-    "expandlog":        [np.exp, np.expm1, np.exp2, np.log, np.log1p, np.log10, np.log2],
-    "trigonometric":    [np.sin, np.cos, np.tan, np.arccos, np.arctan, np.arcsin, np.hypot],
+    "expandlog":        [np.exp, np.exp2, np.log, np.log10, np.log2],       ##  , np.expm1, np.log1p
+    "trigonometric":    [np.sin, np.cos, np.tan, np.arccos, np.arctan, np.arcsin],    ##    , np.hypot
     "hyperbolic":       [np.sinh, np.cosh, np.tanh, np.arccosh, np.arctanh, np.arcsinh],
-    "miscellaneus":     [np.sqrt, np.cbrt, np.square, np.absolute, np.reciprocal],
-    #"rounding":         [np.ceil, np.round, np.trunc],           #SOLO come supporto post-generazione per ridurre le cifre decimali dei valori
+    "miscellaneus":     [np.sqrt, np.cbrt, np.absolute, np.reciprocal],     ##  , np.square
 }
 
 numpy_cost = {np.e, np.pi, np.euler_gamma, np.finfo(float).eps}
@@ -60,10 +59,12 @@ class Individual:
             return np.inf
         return MSE
     
-    def __compute_fitness__(self, penalty: float = 0.1):
-        ''' MSE + f_length '''
+    def __compute_fitness__(self, penalty: float = 0.1, num_vars: int = 1):
+        ''' MSE + f_length + missing_vars '''
         tree_size = self.SymRegTree.get_size()
-        return self.MSE + penalty * tree_size
+        missing_vars = len(self.get_missing_variables(num_vars))  # Conta quante variabili mancano
+
+        return ((missing_vars/num_vars) + 1)*self.MSE + penalty * tree_size
     
     def __select_random_subtree__(self, avoid_root: bool = False, size_bias: bool = False) -> "Node":
         nodes = self.SymRegTree.get_all_nodes()
@@ -103,8 +104,12 @@ class Individual:
 
     def compute_metrics(self, x: np.ndarray[float], y: np.ndarray[float]):
         self.MSE = self.__compute_MSE__(x, y)
-        self.fitness = self.__compute_fitness__()
-        
+        self.fitness = self.__compute_fitness__(num_vars=x.shape[0])
+    
+    def get_missing_variables(self, num_vars: int = 1):
+        tree_vars = {node._value for node in self.SymRegTree.get_all_nodes(type="leaf") if isinstance(node._value, str)}
+        return num_vars - tree_vars
+    
     def show_function(self):
         print(self.SymRegTree)
 
@@ -561,14 +566,12 @@ class Genetic_Algorithm:
 
     def __contamination_1_island__(self, x: np.ndarray[float], y: np.ndarray[float], island: str = "unique" ):
         new_inds = self.__inject_new_individuals__(island=island)
-        [ind.compute_metrics(x, y) for _, pop in self._populations.items() for ind in new_inds] 
+        [ind.compute_metrics(x, y) for ind in new_inds] 
 
-        len_new = len (new_inds)
+        len_new = len(new_inds)
 
-        ## random.shuffle(self._populations[island])
         keep_ind = self._population_size-len_new
         self._populations[island] = self._populations[island][:keep_ind] + new_inds
-        print()
 
     def __migration__(self, contamination_rate: float = 0.25):
         # TODO: In order to perform contamination:
@@ -695,7 +698,7 @@ class Genetic_Algorithm:
                 self.__contamination_1_island__(x, y)
             ## TODO: Before the next era, I contaminate the island's individuals with a function from other island
 
-        self.BEST_IND = self.__save_best_ind__().show_results()     ## TODO: FIx the really best
+        self.BEST_IND = self.__save_best_ind__().show_results()     ## TODO: Fix the really best
         return best_ind_history
 
     def __save_best_ind__(self) -> Individual:    
