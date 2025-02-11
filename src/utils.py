@@ -558,15 +558,18 @@ class Genetic_Algorithm:
         #print([ind.SymRegTree._name for ind in extended_population])
         self._populations[island] = extended_population[:self._population_size]  # SURVIVAL SELECTION
 
-    def __contamination_1_island__(self, island: str = "unique"):
-        new_inds = self.__inject_new_individuals__(self, island=island)
+    def __contamination_1_island__(self, x: np.ndarray[float], y: np.ndarray[float], island: str = "unique" ):
+        new_inds = self.__inject_new_individuals__(island=island)
+        [ind.compute_metrics(x, y) for _, pop in self._populations.items() for ind in new_inds] 
+
         len_new = len (new_inds)
 
         random.shuffle(self._populations[island])
-        self._populations[island] = self._populations[island][:self._population_size-len_new].extend(new_inds)
+        keep_ind = self._population_size-len_new
+        self._populations[island] = self._populations[island][:keep_ind] + new_inds
+        print()
 
-
-    def __migration__(self, contamination_rate: float = 0.1):
+    def __migration__(self, contamination_rate: float = 0.25):
         # TODO: In order to perform contamination:
         #       select one random individual from each island
         #       Choose a island where we contaminate a number of individual
@@ -684,7 +687,10 @@ class Genetic_Algorithm:
                     best_ind_history[island].append(deepcopy(self._populations[island][0]))
             
             print([len(x[1]) for  x in self._populations.items()])
-            self.__migration__() 
+            if self._num_islands > 1:
+                self.__migration__() 
+            else:
+                self.__contamination_1_island__(x, y)
             ## TODO: Before the next era, I contaminate the island's individuals with a function from other island
 
         self.BEST_IND = self.__save_best_ind__().show_results()
