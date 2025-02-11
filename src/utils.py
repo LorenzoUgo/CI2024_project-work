@@ -60,10 +60,10 @@ class Individual:
             return np.inf
         return MSE
     
-    def __compute_fitness__(self, penalty: float = 1.0):
+    def __compute_fitness__(self, penalty: float = 0.1):
         ''' MSE + f_length '''
         tree_size = self.SymRegTree.get_size()
-        return self.MSE + penalty*tree_size
+        return self.MSE + penalty * tree_size
     
 
     def __select_random_subtree__(self, avoid_root: bool = False, size_bias: bool = False) -> "Node":
@@ -104,7 +104,7 @@ class Individual:
 
     def compute_metrics(self, x: np.ndarray[float], y: np.ndarray[float]):
         self.MSE = self.__compute_MSE__(x, y)
-        self.fitness = self.__compute_fitness__()
+        self.fitness = self.__compute_fitness__(penalty=1.0)
         
     def show_function(self):
         print(self.SymRegTree)
@@ -445,7 +445,6 @@ class Genetic_Algorithm:
     _num_offsprings: int
     _num_islands: int
     _populations: dict[str: list[Individual]]
-    ##_population: list[Individual]
     _num_generations: int
     _num_eras: int
     _variables: int
@@ -559,11 +558,32 @@ class Genetic_Algorithm:
         #print([ind.SymRegTree._name for ind in extended_population])
         self._populations[island] = extended_population[:self._population_size]  # SURVIVAL SELECTION
 
-    def __contamination__(self):
+    def __contamination_1_island__(self, island: str = "unique"):
+        new_inds = self.__inject_new_individuals__(self, island=island)
+        len_new = len (new_inds)
+
+        random.shuffle(self._populations[island])
+        self._populations[island] = self._populations[island][:self._population_size-len_new].extend(new_inds)
+
+
+    def __migration__(self, contamination_rate: float = 0.1):
         # TODO: In order to perform contamination:
         #       select one random individual from each island
         #       Choose a island where we contaminate a number of individual
-        ...
+        num_migrants = max(1, int(self._population_size * contamination_rate))
+
+        islands = list(self._populations.keys())
+        random.shuffle(islands)
+
+        for i in range(len(islands)):
+            source_island = islands[i%len(islands)]
+            target_island = islands[(i + 1)%len(islands)]
+            
+            random.shuffle(self._populations[source_island])
+            migrants = [self._populations[source_island].pop() for _ in range(num_migrants)]
+
+            self._populations[target_island].extend(migrants)
+
     def __compute_population_diversity__(self, island: str = "unique"):
         pop = self._populations[island]
 
@@ -577,7 +597,6 @@ class Genetic_Algorithm:
         fitness_variance = np.var(fitness_values)
 
         return unique_trees_rate, fitness_variance
-
 
     def variable_checking(self, value):
         if value.shape[0] != len(self._variables):
@@ -600,7 +619,6 @@ class Genetic_Algorithm:
         no_improvement_count = 0  ##  Generation without improvements
         self.best_fitness = float("inf")
 
-
         ## Compute metrics
         [ind.compute_metrics(x, y) for _, pop in self._populations.items() for ind in pop] 
 
@@ -609,9 +627,10 @@ class Genetic_Algorithm:
         #for e in tqdm(range(self._num_eras), desc="Era", leave=True, position = 0):
         for e in range(self._num_eras):
             print("era: ", e)
+            print([len(x[1]) for  x in self._populations.items()])
             #for i in tqdm(range(self._num_islands), desc="Island", leave=False, position = 1):
             for i in range(self._num_islands):
-                print("isl: ", i)
+                #print("isl: ", i)
                 ## Work on the population of the selected island
                 island = list(self._populations)[i]
                 #for g in tqdm(range(self._num_generations), desc="Generation", leave=False, position = 2):
@@ -638,7 +657,7 @@ class Genetic_Algorithm:
                     if no_improvement_count > 10:  ##  If stagnation more than 10 generation --> force max mutation
                         self._mutation_rate = 0.5 
 
-                    print("gen: ", g)
+                    #print("gen: ", g)
                     offsprings = list()
                     #for o in tqdm(range(self._num_offsprings), desc="Offspring generated", leave=False, position = 3):
                     for o in range(self._num_offsprings):
@@ -648,10 +667,10 @@ class Genetic_Algorithm:
 
                         self.__mutation__(ind1, island)
                         self.__mutation__(ind2, island)
-                        ind1.show_function()
-                        ind2.show_function()
-                        
-                        print()
+                        ##  ind1.show_function()
+                        ##  ind2.show_function()
+                        ##  
+                        ##  print()
 
                         ind1.compute_metrics(x, y)
                         ind2.compute_metrics(x, y)
@@ -664,8 +683,8 @@ class Genetic_Algorithm:
                     self.__survival__(offsprings, island)
                     best_ind_history[island].append(deepcopy(self._populations[island][0]))
             
-            ##  self.__contamination__() 
-
+            print([len(x[1]) for  x in self._populations.items()])
+            self.__migration__() 
             ## TODO: Before the next era, I contaminate the island's individuals with a function from other island
 
         self.BEST_IND = self.__save_best_ind__().show_results()
