@@ -51,8 +51,3 @@ def train(ind: Individual, x: list, y:list) -> float:
     MSE = 100*np.square(y - ind.deploy_function(x)).sum()/len(y)
     print(f"MSE (train) : {MSE:g}")
     return MSE
-
-###
-  # Graph representation of function
-  # Modificare l'interpretazione di livello del grafo -> 
-  # ###
