@@ -30,8 +30,12 @@ def data_split(x: np.ndarray, y: np.ndarray) -> tuple[tuple[np.ndarray, np.ndarr
     '''
     idx_split = int(x.shape[1]*70/100)
 
-    _train = (x[:, :idx_split], y[:idx_split])
-    _test = (x[:, idx_split:], y[idx_split:])
+    x_shuffled = np.apply_along_axis(np.random.permutation, axis=1, arr=x)
+    y_shuffled = np.apply_along_axis(np.random.permutation, axis=1, arr=y)
+
+
+    _train = (x_shuffled[:, :idx_split], y_shuffled[:idx_split])
+    _test = (x_shuffled[:, idx_split:], y_shuffled[idx_split:])
 
     print(f"Train dataset: ", _train[0].shape, _train[1].shape)
     print(f"Test dataset: ", _test[0].shape, _test[1].shape)
